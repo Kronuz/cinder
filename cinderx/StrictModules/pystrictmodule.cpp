@@ -472,6 +472,8 @@ static void StrictModuleLoader_dealloc(StrictModuleLoaderObject* self) {
 static PyObject* errorInfoToTuple(ErrorInfo* info) {
   PyObject* py_lineno = NULL;
   PyObject* py_col = NULL;
+  PyObject* py_msg = NULL;
+  PyObject* py_file = NULL;
   PyObject* result = NULL;
   py_lineno = PyLong_FromLong(info->lineno);
   if (!py_lineno) {
@@ -481,16 +483,20 @@ static PyObject* errorInfoToTuple(ErrorInfo* info) {
   if (!py_col) {
     goto err_cleanup;
   }
-  result = PyTuple_Pack(4, info->msg, info->filename, py_lineno, py_col);
-  if (!result) {
+  py_msg = PyUnicode_FromString(info->msg.c_str());
+  if (!py_msg) {
     goto err_cleanup;
   }
-  Py_DECREF(py_lineno);
-  Py_DECREF(py_col);
-  return result;
+  py_file = PyUnicode_FromString(info->filename.c_str());
+  if (!py_file) {
+    goto err_cleanup;
+  }
+  result = PyTuple_Pack(4, py_msg, py_file, py_lineno, py_col);
 err_cleanup:
   Py_XDECREF(py_lineno);
   Py_XDECREF(py_col);
+  Py_XDECREF(py_msg);
+  Py_XDECREF(py_file);
   return NULL;
 }
 
@@ -506,8 +512,9 @@ static PyObject* StrictModuleLoader_check(
   }
   int error_count = 0;
   int is_strict = 0;
+  const char* modName = PyUnicode_AsUTF8(mod_name);
   StrictAnalyzedModule* mod = StrictModuleChecker_Check(
-      self->checker, mod_name, &error_count, &is_strict);
+      self->checker, modName, &error_count, &is_strict);
   errors = PyList_New(error_count);
   ErrorInfo error_infos[error_count];
   if (error_count > 0 && mod != NULL) {
@@ -525,18 +532,12 @@ static PyObject* StrictModuleLoader_check(
   if (PyErr_Occurred()) {
     goto err_cleanup;
   }
-  for (int i = 0; i < error_count; ++i) {
-    ErrorInfo_Clean(&(error_infos[i]));
-  }
   arena = StrictModuleChecker_GetArena(self->checker);
   result = create_AnalysisResult(mod, mod_name, errors, arena);
   Py_XDECREF(errors);
   return result;
 
 err_cleanup:
-  for (int i = 0; i < error_count; ++i) {
-    ErrorInfo_Clean(&(error_infos[i]));
-  }
   Py_XDECREF(errors);
   return NULL;
 }
@@ -594,11 +595,13 @@ static PyObject* StrictModuleLoader_check_source(
 
   int error_count = 0;
   int is_strict = 0;
+  const char* modName = PyUnicode_AsUTF8(mod_name);
+  const char* fileName = PyUnicode_AsUTF8(file_name);
   StrictAnalyzedModule* mod = StrictModuleChecker_CheckSource(
       self->checker,
       source_str,
-      mod_name,
-      file_name,
+      modName,
+      fileName,
       search_list,
       search_list_size,
       &error_count,
@@ -621,18 +624,12 @@ static PyObject* StrictModuleLoader_check_source(
   if (PyErr_Occurred()) {
     goto err_cleanup;
   }
-  for (int i = 0; i < error_count; ++i) {
-    ErrorInfo_Clean(&(error_infos[i]));
-  }
   arena = StrictModuleChecker_GetArena(self->checker);
   result = create_AnalysisResult(mod, mod_name, errors, arena);
   Py_XDECREF(errors);
   Py_XDECREF(source_copy);
   return result;
 err_cleanup:
-  for (int i = 0; i < error_count; ++i) {
-    ErrorInfo_Clean(&(error_infos[i]));
-  }
   Py_XDECREF(errors);
   Py_XDECREF(source_copy);
   return NULL;
@@ -645,7 +642,11 @@ static PyObject* StrictModuleLoader_set_force_strict(
   if (!PyArg_ParseTuple(args, "O", &force_strict)) {
     return NULL;
   }
-  int ok = StrictModuleChecker_SetForceStrict(self->checker, force_strict);
+  if (!PyBool_Check(force_strict)) {
+    return NULL;
+  }
+  bool forceStrictBool = force_strict == Py_True;
+  int ok = StrictModuleChecker_SetForceStrict(self->checker, forceStrictBool);
   if (ok == 0) {
     Py_RETURN_TRUE;
   }

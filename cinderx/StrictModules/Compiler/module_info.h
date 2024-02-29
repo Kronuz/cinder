@@ -4,13 +4,24 @@
 #include "cinderx/StrictModules/error_sink.h"
 #include "cinderx/StrictModules/exceptions.h"
 #include "cinderx/StrictModules/py_headers.h"
-#include "cinderx/StrictModules/pystrictmodule.h"
 #include "cinderx/StrictModules/symbol_table.h"
 
 #include <memory>
 #include <optional>
 #include <string>
 #include <vector>
+
+// module kind
+#define Ci_NONSTRICT_MODULE_KIND 0
+#define Ci_STRICT_MODULE_KIND 1
+#define Ci_STATIC_MODULE_KIND 2
+
+// stub kind
+#define Ci_STUB_KIND_MASK_NONE 0b000
+#define Ci_STUB_KIND_MASK_ALLOWLIST 0b011
+#define Ci_STUB_KIND_MASK_TYPING 0b100
+#define Ci_STUB_KIND_MASK_STRICT 0b001
+
 namespace strictmod::compiler {
 
 class ModuleInfo;

@@ -27,17 +27,6 @@ typedef struct {
 CiAPI_DATA(PyTypeObject) Ci_StrictModuleLoader_Type;
 CiAPI_DATA(PyTypeObject) Ci_StrictModuleAnalysisResult_Type;
 
-// module kind
-#define Ci_NONSTRICT_MODULE_KIND 0
-#define Ci_STRICT_MODULE_KIND 1
-#define Ci_STATIC_MODULE_KIND 2
-
-// stub kind
-#define Ci_STUB_KIND_MASK_NONE 0b000
-#define Ci_STUB_KIND_MASK_ALLOWLIST 0b011
-#define Ci_STUB_KIND_MASK_TYPING 0b100
-#define Ci_STUB_KIND_MASK_STRICT 0b001
-
 #define StrictModuleLoaderObject_Check(v) \
   (Py_TYPE(v) == &Ci_StrictModuleLoader_Type)
 

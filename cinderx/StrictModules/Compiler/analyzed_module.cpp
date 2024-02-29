@@ -1,8 +1,6 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 #include "cinderx/StrictModules/Compiler/analyzed_module.h"
 
-#include "cinderx/StrictModules/pystrictmodule.h"
-
 namespace strictmod::compiler {
 bool AnalyzedModule::isStrict() const {
   return moduleKind_ != ModuleKind::kNonStrict;

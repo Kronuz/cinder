@@ -1,6 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 #pragma once
 
+#include <string>
+
 #include "Python.h"
 
 /*
@@ -14,13 +16,11 @@ extern "C" {
 typedef struct _arena PyArena;
 
 typedef struct _ErrorInfo {
-  PyObject* msg;
-  PyObject* filename;
+  std::string msg;
+  std::string filename;
   int lineno;
   int col;
 } ErrorInfo;
-
-void ErrorInfo_Clean(ErrorInfo* info);
 
 typedef struct StrictModuleChecker StrictModuleChecker;
 typedef struct StrictAnalyzedModule StrictAnalyzedModule;
@@ -77,7 +77,7 @@ void StrictModuleChecker_Free(StrictModuleChecker* checker);
  */
 StrictAnalyzedModule* StrictModuleChecker_Check(
     StrictModuleChecker* checker,
-    PyObject* module_name,
+    const char* module_name,
     int* out_error_count,
     int* is_strict_out);
 
@@ -90,8 +90,8 @@ StrictAnalyzedModule* StrictModuleChecker_Check(
 StrictAnalyzedModule* StrictModuleChecker_CheckSource(
     StrictModuleChecker* checker,
     const char* source,
-    PyObject* module_name,
-    PyObject* file_name,
+    const char* module_name,
+    const char* file_name,
     const char* submodule_search_locations[],
     int search_locations_size,
     int* out_error_count,
@@ -114,7 +114,7 @@ int StrictModuleChecker_GetAnalyzedModuleCount(StrictModuleChecker* checker);
  */
 int StrictModuleChecker_SetForceStrict(
     StrictModuleChecker* checker,
-    PyObject* force_strict);
+    bool force_strict);
 int StrictModuleChecker_SetForceStrictByName(
     StrictModuleChecker* checker,
     const char* forced_module_name);

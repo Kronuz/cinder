@@ -9,10 +9,6 @@
 #include <utility>
 #include <vector>
 
-void ErrorInfo_Clean(ErrorInfo* info) {
-  Py_XDECREF(info->filename);
-  Py_XDECREF(info->msg);
-}
 
 StrictModuleChecker* StrictModuleChecker_New() {
   auto checker = new strictmod::compiler::ModuleLoader({}, {});
@@ -118,7 +114,7 @@ static bool getAnalyzedResult(
 
 StrictAnalyzedModule* StrictModuleChecker_Check(
     StrictModuleChecker* checker,
-    PyObject* module_name,
+    const char* module_name,
     int* out_error_count,
     int* is_strict_out) {
   if (!PyUnicode_Check(module_name)) {
@@ -126,9 +122,8 @@ StrictAnalyzedModule* StrictModuleChecker_Check(
   }
   strictmod::compiler::ModuleLoader* loader =
       reinterpret_cast<strictmod::compiler::ModuleLoader*>(checker);
-  const char* modName = PyUnicode_AsUTF8(module_name);
-  loader->log("Checking module: %s", modName);
-  auto analyzedModule = loader->loadModule(modName);
+  loader->log("Checking module: %s", module_name);
+  auto analyzedModule = loader->loadModule(module_name);
   *is_strict_out = getAnalyzedResult(analyzedModule, out_error_count);
   return reinterpret_cast<StrictAnalyzedModule*>(analyzedModule);
 }
@@ -136,16 +131,14 @@ StrictAnalyzedModule* StrictModuleChecker_Check(
 StrictAnalyzedModule* StrictModuleChecker_CheckSource(
     StrictModuleChecker* checker,
     const char* source,
-    PyObject* module_name,
-    PyObject* file_name,
+    const char* module_name,
+    const char* file_name,
     const char* submodule_search_locations[],
     int search_locations_size,
     int* out_error_count,
     int* is_strict_out) {
   strictmod::compiler::ModuleLoader* loader =
       reinterpret_cast<strictmod::compiler::ModuleLoader*>(checker);
-  const char* modName = PyUnicode_AsUTF8(module_name);
-  const char* fileName = PyUnicode_AsUTF8(file_name);
   std::vector<std::string> searchLocations;
   searchLocations.reserve(search_locations_size);
   for (int i = 0; i < search_locations_size; i++) {
@@ -153,7 +146,7 @@ StrictAnalyzedModule* StrictModuleChecker_CheckSource(
   }
 
   auto analyzedModule =
-      loader->loadModuleFromSource(source, modName, fileName, searchLocations);
+      loader->loadModuleFromSource(source, module_name, file_name, searchLocations);
   *is_strict_out = getAnalyzedResult(analyzedModule, out_error_count);
   return reinterpret_cast<StrictAnalyzedModule*>(analyzedModule);
 }
@@ -170,33 +163,22 @@ int StrictModuleChecker_GetErrors(
   }
   for (size_t i = 0; i < length; ++i) {
     const auto& err = errors[i];
-    std::string msg = err->displayString(false);
-    const std::string& filename = err->getFilename();
-
-    PyObject* py_msg = PyUnicode_FromString(msg.c_str());
-    if (!py_msg) {
-      return -1;
-    }
-    PyObject* py_file = PyUnicode_FromString(filename.c_str());
-    if (!py_file) {
-      Py_XDECREF(py_msg);
-      return -1;
-    }
-    errors_out[i] = {py_msg, py_file, err->getLineno(), err->getCol()};
+      errors_out[i] = {
+          err->displayString(false),
+          err->getFilename(),
+          err->getLineno(),
+          err->getCol(),
+      };
   }
   return 0;
 }
 
 int StrictModuleChecker_SetForceStrict(
     StrictModuleChecker* checker,
-    PyObject* force_strict) {
-  if (!PyBool_Check(force_strict)) {
-    return -1;
-  }
+    bool force_strict) {
   strictmod::compiler::ModuleLoader* loader =
       reinterpret_cast<strictmod::compiler::ModuleLoader*>(checker);
-  bool forceStrictBool = force_strict == Py_True;
-  loader->setForceStrict(forceStrictBool);
+  loader->setForceStrict(force_strict);
   return 0;
 }
 
