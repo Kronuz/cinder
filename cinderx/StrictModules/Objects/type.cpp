@@ -299,7 +299,7 @@ std::shared_ptr<BaseStrictObject> StrictType::type__new__(
     const std::vector<std::shared_ptr<BaseStrictObject>>& args,
     const std::vector<std::string>& namedArgs,
     const CallerContext& caller) {
-  int posArgSize = args.size() - namedArgs.size();
+  size_t posArgSize = args.size() - namedArgs.size();
   if (posArgSize != 2 && posArgSize != 4) {
     caller.raiseTypeError("type() takes 1 or 3 arguments");
   }

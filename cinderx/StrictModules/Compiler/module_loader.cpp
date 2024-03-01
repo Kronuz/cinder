@@ -47,9 +47,9 @@ std::optional<ModuleKind> getModuleKindFromImportNames(
     asdl_alias_seq* importNames,
     const char* strictFlag,
     const char* staticFlag) {
-  size_t len = asdl_seq_LEN(importNames);
+  auto len = asdl_seq_LEN(importNames);
   // check if this is import __strict__/__static__
-  for (size_t i = 0; i < len; ++i) {
+  for (auto i = 0; i < len; ++i) {
     alias_ty alias = reinterpret_cast<alias_ty>(asdl_seq_GET(importNames, i));
     std::optional<ModuleKind> kind =
         getModuleKindFromAlias(alias, strictFlag, staticFlag);
@@ -79,18 +79,18 @@ bool containsAllowSideEffectsFlag(asdl_alias_seq* importNames) {
 std::pair<ModuleKind, ShouldAnalyze> getModuleKindFromStmts(
     asdl_stmt_seq* seq,
     ModuleInfo* modInfo) {
-  Py_ssize_t n = asdl_seq_LEN(seq);
+  auto n = asdl_seq_LEN(seq);
   bool seenDocStr = false;
   std::optional<ModuleKind> modKind = std::nullopt;
   ShouldAnalyze should_analyze = ShouldAnalyze::kYes;
   const char* strictFlag = "__strict__";
   const char* staticFlag = "__static__";
-  for (int _i = 0; _i < n; _i++) {
+  for (auto _i = 0; _i < n; _i++) {
     stmt_ty stmt = reinterpret_cast<stmt_ty>(asdl_seq_GET_UNTYPED(seq, _i));
     switch (stmt->kind) {
       case Import_kind: {
         auto importNames = stmt->v.Import.names;
-        size_t len = asdl_seq_LEN(importNames);
+        auto len = asdl_seq_LEN(importNames);
         // check if this is import __strict__/__static__
         std::optional<ModuleKind> tempModKind =
             getModuleKindFromImportNames(importNames, strictFlag, staticFlag);
@@ -437,15 +437,15 @@ std::unique_ptr<ModuleInfo> ModuleLoader::findModule(
       if (readResult) {
         log("Found %s at %s", modName.c_str(), filename.c_str());
         AstAndSymbols& result = readResult.value();
-        std::string filename = nmPackagePath.string();
+        std::string packagePath = nmPackagePath.string();
         bool allowlisted = isAllowListed(modName);
         return std::make_unique<ModuleInfo>(
             std::move(modName),
-            filename,
+            packagePath,
             result.ast,
             result.futureAnnotations,
             std::move(result.symbols),
-            StubKind::getStubKind(filename, allowlisted),
+            StubKind::getStubKind(packagePath, allowlisted),
             std::vector<std::string>{importPath});
       }
     }

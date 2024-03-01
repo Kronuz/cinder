@@ -9,7 +9,8 @@ inline std::shared_ptr<T> assertStaticCast(std::shared_ptr<V> obj) {
   return std::static_pointer_cast<T>(obj);
 }
 
-inline int normalizeIndex(int index, int size) {
+template <typename T>
+inline size_t normalizeIndex(T index, size_t size) {
   return index < 0 ? index + size : index;
 }
 } // namespace strictmod::objects

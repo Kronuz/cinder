@@ -198,10 +198,10 @@ std::shared_ptr<BaseStrictObject> StrictFunction::function__code__getter(
 }
 
 void StrictFunction::makeCodeObjHelper(const CallerContext&) {
-  int posOnlyArgCount = posonlyArgs_.size();
+  size_t posOnlyArgCount = posonlyArgs_.size();
   auto posOnlyArgCountInt =
       std::make_shared<StrictInt>(IntType(), creator_, posOnlyArgCount);
-  int argCount = posArgs_.size() + posOnlyArgCount;
+  size_t argCount = posArgs_.size() + posOnlyArgCount;
   auto argCountInt = std::make_shared<StrictInt>(IntType(), creator_, argCount);
 
   std::vector<PyObject*> varnames = symbols_.getFunctionVarNames();
@@ -215,7 +215,7 @@ void StrictFunction::makeCodeObjHelper(const CallerContext&) {
   auto varnamesTuple = std::make_shared<StrictTuple>(
       TupleType(), creator_, std::move(varnamesVec));
 
-  int kwOnlyArgCount = kwonlyArgs_.size();
+  size_t kwOnlyArgCount = kwonlyArgs_.size();
   auto kwOnlyArgCountInt =
       std::make_shared<StrictInt>(IntType(), creator_, kwOnlyArgCount);
 

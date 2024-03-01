@@ -144,7 +144,7 @@ std::shared_ptr<BaseStrictObject> StrictDict::dict__init__(
     const std::vector<std::shared_ptr<BaseStrictObject>>& args,
     const std::vector<std::string>& namedArgs,
     const CallerContext& caller) {
-  int posArgNum = args.size() - namedArgs.size();
+  size_t posArgNum = args.size() - namedArgs.size();
   if (posArgNum < 0 || posArgNum > 1) {
     caller.raiseTypeError(
         "dict.__init__() takes {} positional arguments but {} were given",
@@ -163,7 +163,7 @@ std::shared_ptr<BaseStrictObject> StrictDict::dictUpdate(
     const std::vector<std::shared_ptr<BaseStrictObject>>& args,
     const std::vector<std::string>& namedArgs,
     const CallerContext& caller) {
-  int posArgNum = args.size() - namedArgs.size();
+  size_t posArgNum = args.size() - namedArgs.size();
   if (posArgNum < 0 || posArgNum > 1) {
     caller.raiseTypeError(
         "dict.update() takes {} positional arguments but {} were given",

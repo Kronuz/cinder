@@ -468,7 +468,7 @@ std::shared_ptr<BaseStrictObject> chrImpl(
     caller.raiseExceptionStr(
         ValueErrorType(), "chr arg {} not in range", iInt->getDisplayName());
   }
-  Ref<> resPyObj = Ref<>::steal(PyUnicode_FromOrdinal(*v));
+  Ref<> resPyObj = Ref<>::steal(PyUnicode_FromOrdinal((int)*v));
   return StrictString::strFromPyObj(std::move(resPyObj), caller);
 }
 

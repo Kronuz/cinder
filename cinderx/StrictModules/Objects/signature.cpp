@@ -94,14 +94,14 @@ std::unique_ptr<DictType> FuncSignature::bind(
   // process the rest of posArgs_
 
   // this can be negative when posDefaults also covers posonly args
-  int posDefaultsOffset = posArgs_.size() - posDefaultCount;
+  size_t posDefaultsOffset = posArgs_.size() - posDefaultCount;
   assert(map.size() - posonlyCount >= 0); // since we processed all posonly args
   for (size_t i = map.size() - posonlyCount; i < posArgs_.size(); ++i) {
     const std::string& posArgName = posArgs_[i];
     auto got = kwMap.find(posArgName);
     if (got == kwMap.map_end()) {
       // no default for this arg, error
-      if (int(i) < posDefaultsOffset) {
+      if (i < posDefaultsOffset) {
         caller.raiseTypeError(
             "{} missing required positional argument {}",
             funcName_,

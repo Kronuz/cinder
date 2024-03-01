@@ -171,8 +171,8 @@ static std::shared_ptr<BaseStrictObject> sequenceGetItemHelper(
           self->getTypeRef().getName(),
           intIndex->getDisplayName());
     }
-    int idx = normalizeIndex(*intIndex->getValue(), data.size());
-    if (idx >= 0 && (size_t)idx < data.size()) {
+    size_t idx = normalizeIndex(*intIndex->getValue(), data.size());
+    if (idx >= 0 && idx < data.size()) {
       return data[idx];
     } else {
       caller.raiseTypeError(
@@ -380,8 +380,8 @@ std::shared_ptr<BaseStrictObject> StrictList::list__setitem__(
       caller.raiseTypeError(
           "list assignment index out of range: {}", intIndex->getDisplayName());
     }
-    int idx = normalizeIndex(*intIndex->getValue(), data.size());
-    if (idx >= 0 && (size_t)idx < data.size()) {
+    size_t idx = normalizeIndex(*intIndex->getValue(), data.size());
+    if (idx >= 0 && idx < data.size()) {
       self->setData(idx, std::move(value));
     } else {
       caller.raiseTypeError("list assignment index out of range: {}", idx);
@@ -1221,7 +1221,7 @@ static std::shared_ptr<StrictInt> getSliceIndex(
 std::tuple<int, int, int> StrictSlice::normalizeToSequenceIndex(
     const CallerContext& caller,
     int sequenceSize) {
-  int start, stop, step;
+  int_type start, stop, step;
   // step
   if (step_ == NoneObject()) {
     step = 1;

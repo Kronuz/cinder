@@ -125,8 +125,8 @@ class StarCallableWrapper {
       const std::vector<std::shared_ptr<BaseStrictObject>>& args,
       const std::vector<std::string>& namedArgs,
       const CallerContext& caller) {
-    const int n = sizeof...(Args);
-    int unnamedSize = args.size() - namedArgs.size();
+    const auto n = sizeof...(Args);
+    size_t unnamedSize = args.size() - namedArgs.size();
     if (unnamedSize < n) {
       caller.raiseTypeError(
           "{}() takes {} positional arguments but {} were given",
@@ -136,7 +136,7 @@ class StarCallableWrapper {
     }
     std::vector<std::shared_ptr<BaseStrictObject>> starArgs;
     starArgs.reserve(unnamedSize - n);
-    for (int i = n; i < unnamedSize; ++i) {
+    for (auto i = n; i < unnamedSize; ++i) {
       // *args
       starArgs.push_back(args[i]);
     }
@@ -245,7 +245,8 @@ class PythonWrappedCallableByName {
       const std::vector<std::shared_ptr<BaseStrictObject>>& args,
       const CallerContext& caller,
       std::index_sequence<Is...>) {
-    Ref<> pyArgs[args.size()];
+    std::vector<Ref<>> pyArgs;
+    pyArgs.resize(args.size());
 
     for (std::size_t i = 0; i < args.size(); ++i) {
       Ref<> val = args[i]->getPyObject();

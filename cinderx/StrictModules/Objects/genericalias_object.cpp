@@ -90,14 +90,14 @@ StrictGenericAlias::subParametersHelper(
     itemArgs.emplace_back(item);
   }
   auto& parameters = parameters_.value();
-  int nItems = itemArgs.size();
-  int nParams = parameters.size();
+  size_t nItems = itemArgs.size();
+  size_t nParams = parameters.size();
 
   if (nItems != nParams) {
     caller.raiseExceptionStr(
         TypeErrorType(), "expected {} arguments but got {}", nParams, nItems);
   }
-  auto vec_idx = [](auto& vec, auto& item) -> int {
+  auto vec_idx = [](auto& vec, auto& item) -> size_t {
     auto it = std::find(vec.begin(), vec.end(), item);
     if (it == vec.end()) {
       return -1;
@@ -115,7 +115,7 @@ StrictGenericAlias::subParametersHelper(
       std::vector<std::shared_ptr<BaseStrictObject>> subParams =
           iGetElementsVec(std::move(subParamObj), caller);
       for (auto& subP : subParams) {
-        int paramIdx = vec_idx(parameters, subP);
+        size_t paramIdx = vec_idx(parameters, subP);
         if (paramIdx >= 0) {
           newSubArgs.emplace_back(itemArgs[paramIdx]);
         }

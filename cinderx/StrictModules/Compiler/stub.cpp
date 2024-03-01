@@ -14,8 +14,8 @@ const std::string kFullImplicitMarker = "__implicit__";
 class CannotDecideSourceException {};
 
 bool hasImplicitDecorator(asdl_expr_seq* decorators) {
-  int size = asdl_seq_LEN(decorators);
-  for (int i = 0; i < size; ++i) {
+  auto size = asdl_seq_LEN(decorators);
+  for (auto i = 0; i < size; ++i) {
     expr_ty dec = reinterpret_cast<expr_ty>(asdl_seq_GET(decorators, i));
 
     switch (dec->kind) {
@@ -79,8 +79,8 @@ std::unordered_map<std::string, int> getImplicitToLocHelper(mod_ty m) {
     case Module_kind: {
       std::unordered_map<std::string, int> map;
       auto mod = m->v.Module;
-      int bodySize = asdl_seq_LEN(mod.body);
-      for (int i = 0; i < bodySize; ++i) {
+      auto bodySize = asdl_seq_LEN(mod.body);
+      for (auto i = 0; i < bodySize; ++i) {
         stmt_ty s = reinterpret_cast<stmt_ty>(asdl_seq_GET(mod.body, i));
         buildImplicitToLocHelper(s, i, map);
       }
@@ -132,14 +132,14 @@ void buildLocToSrcHelper(
       // visit both branches. If only one definition of a class/function
       // is found, we will use that one.
       auto ifStmt = s->v.If;
-      int bSize = asdl_seq_LEN(ifStmt.body);
-      int eSize = asdl_seq_LEN(ifStmt.orelse);
-      for (int i = 0; i < bSize; ++i) {
+      auto bSize = asdl_seq_LEN(ifStmt.body);
+      auto eSize = asdl_seq_LEN(ifStmt.orelse);
+      for (auto i = 0; i < bSize; ++i) {
         stmt_ty innerStmt =
             reinterpret_cast<stmt_ty>(asdl_seq_GET(ifStmt.body, i));
         buildLocToSrcHelper(innerStmt, locationMap, SourceMap);
       }
-      for (int i = 0; i < eSize; ++i) {
+      for (auto i = 0; i < eSize; ++i) {
         stmt_ty innerStmt =
             reinterpret_cast<stmt_ty>(asdl_seq_GET(ifStmt.orelse, i));
         buildLocToSrcHelper(innerStmt, locationMap, SourceMap);
@@ -160,8 +160,8 @@ void buildLocToSrcHelper(
     }
     case Assign_kind: {
       asdl_expr_seq* targets = s->v.Assign.targets;
-      int targetSize = asdl_seq_LEN(targets);
-      for (int i = 0; i < targetSize; ++i) {
+      auto targetSize = asdl_seq_LEN(targets);
+      for (auto i = 0; i < targetSize; ++i) {
         expr_ty target = reinterpret_cast<expr_ty>(asdl_seq_GET(targets, i));
         if (target->kind == Name_kind) {
           std::string name = PyUnicode_AsUTF8(target->v.Name.id);
@@ -188,8 +188,8 @@ std::unordered_map<int, stmt_ty> getLocToSrcHelper(
     case Module_kind: {
       std::unordered_map<int, stmt_ty> map;
       auto mod = m->v.Module;
-      int bodySize = asdl_seq_LEN(mod.body);
-      for (int i = 0; i < bodySize; ++i) {
+      auto bodySize = asdl_seq_LEN(mod.body);
+      for (auto i = 0; i < bodySize; ++i) {
         stmt_ty s = reinterpret_cast<stmt_ty>(asdl_seq_GET(mod.body, i));
         buildLocToSrcHelper(s, locationMap, map);
       }
@@ -228,7 +228,7 @@ bool checkFullImplicitHelper(mod_ty m) {
   switch (m->kind) {
     case Module_kind: {
       auto mod = m->v.Module;
-      int bodySize = asdl_seq_LEN(mod.body);
+      auto bodySize = asdl_seq_LEN(mod.body);
       if (bodySize == 0) {
         return false;
       }
