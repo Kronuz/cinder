@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 #include "cinderx/StrictModules/Objects/builtins.h"
 
-#include "cinderx/StrictModules/Compiler/abstract_module_loader.h"
 #include "cinderx/StrictModules/Compiler/module_info.h"
+#include "cinderx/StrictModules/Compiler/module_loader.h"
 #include "cinderx/StrictModules/Objects/callable_wrapper.h"
 #include "cinderx/StrictModules/Objects/object_interface.h"
 #include "cinderx/StrictModules/Objects/objects.h"

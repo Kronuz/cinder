@@ -2,7 +2,7 @@
 #pragma once
 
 #include "cinderx/StrictModules/caller_context.h"
-#include "pycore_dependencies.h"
+#include "cinderx/StrictModules/pycore_dependencies.h"
 
 namespace strictmod::objects {
 class BaseStrictObject;

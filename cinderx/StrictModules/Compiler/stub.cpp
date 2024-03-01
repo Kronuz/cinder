@@ -2,7 +2,7 @@
 #include "cinderx/StrictModules/Compiler/stub.h"
 
 #include "cinderx/Common/ref.h"
-#include "cinderx/StrictModules/Compiler/abstract_module_loader.h"
+#include "cinderx/StrictModules/Compiler/module_loader.h"
 #include "cinderx/StrictModules/pycore_dependencies.h"
 
 #include <unordered_map>

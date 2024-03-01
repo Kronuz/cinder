@@ -14,14 +14,13 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
 namespace strictmod::compiler {
 enum class FileSuffixKind { kPythonFile, kStrictStubFile, kTypingStubFile };
 
 enum class AllowListKind { kPrefix, kExact };
 
-static const std::vector<std::string> kStrictFlags{"__strict__", "__static__"};
-
-const char* getFileSuffixKindName(FileSuffixKind kind);
+const std::string& getFileSuffixKindName(FileSuffixKind kind);
 
 class ModuleLoader {
  public:
@@ -107,7 +106,6 @@ class ModuleLoader {
   Note that this is different from the value of the analyzed module
   being nullptr, indicating that the analysis failed/module is not strict
   */
-  AnalyzedModule* loadModule(const char* modName);
   AnalyzedModule* loadModule(const std::string& modName);
   /**
   Remove a module from checked modules
@@ -115,7 +113,6 @@ class ModuleLoader {
   void deleteModule(const std::string& modName);
   void recordLazyModule(const std::string& modName);
 
-  std::shared_ptr<StrictModuleObject> loadModuleValue(const char* modName);
   std::shared_ptr<StrictModuleObject> loadModuleValue(
       const std::string& modName);
 
@@ -128,12 +125,6 @@ class ModuleLoader {
       const std::string& name,
       const std::string& filename,
       std::vector<std::string> searchLocations);
-  AnalyzedModule* loadModuleFromSource(
-      const char* source,
-      const std::string& name,
-      const std::string& filename,
-      std::vector<std::string> searchLocations);
-
   std::unique_ptr<ModuleInfo> findModule(
       const std::string& modName,
       const std::vector<std::string>& searchLocations,
@@ -149,15 +140,15 @@ class ModuleLoader {
 
   AnalyzedModule* loadSingleModule(const std::string& modName);
 
-  bool setImportPath(std::vector<std::string> importPath);
-  bool setStubImportPath(std::string importPath);
-  bool setStubImportPath(std::vector<std::string> importPath);
+  void setImportPath(std::vector<std::string> importPath);
+  void setStubImportPath(std::string importPath);
+  void setStubImportPath(std::vector<std::string> importPath);
   void setForceStrict(bool force);
   void setForceStrictFunc(ForceStrictFunc forceFunc);
-  bool clearAllowList();
-  bool setAllowListPrefix(std::vector<std::string> allowList);
-  bool setAllowListExact(std::vector<std::string> allowList);
-  bool setAllowListRegex(std::vector<std::string> allowList);
+  void clearAllowList();
+  void setAllowListPrefix(std::vector<std::string> allowList);
+  void setAllowListExact(std::vector<std::string> allowList);
+  void setAllowListRegex(std::vector<std::string> allowList);
 
   int getAnalyzedModuleCount() const;
 

@@ -1,5 +1,5 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-#include "cinderx/StrictModules/Compiler/abstract_module_loader.h"
+#include "cinderx/StrictModules/Compiler/module_loader.h"
 
 #include "cinderx/StrictModules/Compiler/analyzed_module.h"
 #include "cinderx/StrictModules/Compiler/module_info.h"
@@ -19,9 +19,11 @@ namespace strictmod::compiler {
 using strictmod::objects::ModuleType;
 using strictmod::objects::StrictModuleObject;
 
-static const char* kFileSuffixNames[] = {".py", ".pys", ".pyi"};
+static const std::vector<const std::string> kFileSuffixNames = {".py", ".pys", ".pyi"};
 
-const char* getFileSuffixKindName(FileSuffixKind kind) {
+static const std::vector<const std::string> kStrictFlags{"__strict__", "__static__"};
+
+const std::string& getFileSuffixKindName(FileSuffixKind kind) {
   return kFileSuffixNames[static_cast<int>(kind)];
 }
 
@@ -180,10 +182,6 @@ std::pair<ModuleKind, ShouldAnalyze> getModuleKind(ModuleInfo* modInfo) {
   return {ModuleKind::kNonStrict, ShouldAnalyze::kYes};
 }
 
-AnalyzedModule* ModuleLoader::loadModule(const char* modName) {
-  return loadModule(std::string(modName));
-}
-
 AnalyzedModule* ModuleLoader::loadModule(const std::string& modName) {
   auto exist = modules_.find(modName);
   if (exist != modules_.end()) {
@@ -211,10 +209,6 @@ void ModuleLoader::deleteModule(const std::string& modName) {
   }
 }
 
-std::shared_ptr<StrictModuleObject> ModuleLoader::loadModuleValue(
-    const char* modName) {
-  return loadModuleValue(std::string(modName));
-}
 std::shared_ptr<StrictModuleObject> ModuleLoader::loadModuleValue(
     const std::string& modName) {
   AnalyzedModule* mod = loadModule(modName);
@@ -288,19 +282,16 @@ AnalyzedModule* ModuleLoader::loadSingleModule(const std::string& modName) {
   return nullptr;
 }
 
-bool ModuleLoader::setImportPath(std::vector<std::string> importPath) {
+void ModuleLoader::setImportPath(std::vector<std::string> importPath) {
   importPath_ = std::move(importPath);
-  return true;
 }
 
-bool ModuleLoader::setStubImportPath(std::string importPath) {
+void ModuleLoader::setStubImportPath(std::string importPath) {
   stubImportPath_ = {std::move(importPath)};
-  return true;
 }
 
-bool ModuleLoader::setStubImportPath(std::vector<std::string> importPath) {
+void ModuleLoader::setStubImportPath(std::vector<std::string> importPath) {
   stubImportPath_ = std::move(importPath);
-  return true;
 }
 
 void ModuleLoader::setForceStrict(bool force) {
@@ -313,34 +304,26 @@ void ModuleLoader::setForceStrictFunc(ForceStrictFunc forceFunc) {
   forceStrict_.emplace(std::move(forceFunc));
 }
 
-bool ModuleLoader::clearAllowList() {
+void ModuleLoader::clearAllowList() {
   allowList_.clear();
-  return true;
 }
 
-bool ModuleLoader::setAllowListPrefix(std::vector<std::string> allowList) {
-  for (const std::string& mod : allowList) {
+void ModuleLoader::setAllowListPrefix(std::vector<std::string> allowList) {
+  for (const auto& mod : allowList) {
     allowList_.emplace_back(mod, AllowListKind::kPrefix);
   }
-  return true;
 }
 
-bool ModuleLoader::setAllowListExact(std::vector<std::string> allowList) {
-  for (const std::string& mod : allowList) {
+void ModuleLoader::setAllowListExact(std::vector<std::string> allowList) {
+  for (const auto& mod : allowList) {
     allowList_.emplace_back(mod, AllowListKind::kExact);
   }
-  return true;
 }
 
-bool ModuleLoader::setAllowListRegex(std::vector<std::string> allowList) {
-  for (const std::string& regex : allowList) {
-    try {
-      allowListRegexes_.emplace_back(regex);
-    } catch (const std::regex_error&) {
-      return -1;
-    }
+void ModuleLoader::setAllowListRegex(std::vector<std::string> allowList) {
+  for (const auto& regex : allowList) {
+    allowListRegexes_.emplace_back(regex);
   }
-  return true;
 }
 
 AnalyzedModule* ModuleLoader::loadModuleFromSource(
@@ -348,18 +331,9 @@ AnalyzedModule* ModuleLoader::loadModuleFromSource(
     const std::string& name,
     const std::string& filename,
     std::vector<std::string> searchLocations) {
-  return loadModuleFromSource(
-      source.c_str(), name, filename, std::move(searchLocations));
-}
-
-AnalyzedModule* ModuleLoader::loadModuleFromSource(
-    const char* source,
-    const std::string& name,
-    const std::string& filename,
-    std::vector<std::string> searchLocations) {
   log("Loading module %s from source: %s", name.c_str(), filename.c_str());
   auto readResult =
-      readFromSource(source, filename.c_str(), Py_file_input, arena_);
+      readFromSource(source.c_str(), filename.c_str(), Py_file_input, arena_);
   if (readResult) {
     AstAndSymbols& result = readResult.value();
     bool allowlisted = isAllowListed(name);
@@ -399,25 +373,24 @@ std::unique_ptr<ModuleInfo> ModuleLoader::findModule(
     pos += 1;
   }
 
-  const char* suffix = getFileSuffixKindName(suffixKind);
+  const std::string& suffix = getFileSuffixKindName(suffixKind);
 
   for (const std::string& importPath : searchLocations) {
     // case 1: .py file
     std::filesystem::path pyModPath =
         std::filesystem::path(importPath) / modPathStr;
     pyModPath += suffix;
-    const char* modPathCstr = pyModPath.c_str();
     std::string filename = pyModPath.string();
     std::optional<AstAndSymbols> readResult;
 
     if (isForcedStrict(modName, filename)) {
-      readResult = readFromFile(modPathCstr, arena_, {});
+      readResult = readFromFile(filename, arena_, {});
     } else {
-      readResult = readFromFile(modPathCstr, arena_, kStrictFlags);
+      readResult = readFromFile(filename, arena_, kStrictFlags);
     }
 
     if (readResult) {
-      log("Found %s at %s", modName.c_str(), modPathCstr);
+      log("Found %s at %s", modName.c_str(), filename.c_str());
       AstAndSymbols& result = readResult.value();
       bool allowlisted = isAllowListed(modName);
       return std::make_unique<ModuleInfo>(
@@ -433,17 +406,16 @@ std::unique_ptr<ModuleInfo> ModuleLoader::findModule(
     std::filesystem::path initModPath =
         std::filesystem::path(importPath) / modPathStr / "__init__";
     initModPath += suffix;
-    const char* initPathCstr = initModPath.c_str();
     filename = initModPath.string();
 
     if (isForcedStrict(modName, filename)) {
-      readResult = readFromFile(initPathCstr, arena_, {});
+      readResult = readFromFile(filename, arena_, {});
     } else {
-      readResult = readFromFile(initPathCstr, arena_, kStrictFlags);
+      readResult = readFromFile(filename, arena_, kStrictFlags);
     }
 
     if (readResult) {
-      log("Found %s at %s", modName.c_str(), modPathCstr);
+      log("Found %s at %s", modName.c_str(), filename.c_str());
       AstAndSymbols& result = readResult.value();
       bool allowlisted = isAllowListed(modName);
       return std::make_unique<ModuleInfo>(
@@ -463,7 +435,7 @@ std::unique_ptr<ModuleInfo> ModuleLoader::findModule(
       readResult =
           readFromSource("", nmPackagePath.c_str(), Py_file_input, arena_);
       if (readResult) {
-        log("Found %s at %s", modName.c_str(), modPathCstr);
+        log("Found %s at %s", modName.c_str(), filename.c_str());
         AstAndSymbols& result = readResult.value();
         std::string filename = nmPackagePath.string();
         bool allowlisted = isAllowListed(modName);

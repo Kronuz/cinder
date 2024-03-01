@@ -4,8 +4,8 @@
 /** Include this file instead of including the gtest headers to
 avoid macro naming conflict between gtest and python ast.h
 */
-#include "cinderx/StrictModules/Compiler/abstract_module_loader.h"
 #include "cinderx/StrictModules/Compiler/module_info.h"
+#include "cinderx/StrictModules/Compiler/module_loader.h"
 #include "cinderx/StrictModules/Tests/test_util.h"
 #include "cinderx/StrictModules/analyzer.h"
 #include "cinderx/StrictModules/error_sink.h"

@@ -7,9 +7,9 @@
 
 namespace strictmod {
 std::optional<AstAndSymbols> readFromFile(
-    const char* filenameStr,
+    const std::string& filenameStr,
     PyArena* arena,
-    const std::vector<std::string>& checkSubStrings) {
+    const std::vector<const std::string>& checkSubStrings) {
   PyFutureFeatures* pyFutures = nullptr;
   PySymtable* symbols = nullptr;
   mod_ty mod = nullptr;
@@ -40,7 +40,7 @@ std::optional<AstAndSymbols> readFromFile(
     }
   }
 
-  PyObject* filename = PyUnicode_DecodeFSDefault(filenameStr);
+  PyObject* filename = PyUnicode_DecodeFSDefault(filenameStr.c_str());
   FILE* fp = _Py_fopen_obj(filename, "rb");
 
   if (fp == nullptr || arena == nullptr) {

@@ -2,7 +2,8 @@
 #pragma once
 
 #include "Python.h"
-#include "cinderx/StrictModules/strict_module_checker_interface.h"
+
+#include "cinderx/StrictModules/Compiler/module_loader.h"
 
 #ifndef Py_LIMITED_API
 #ifdef __cplusplus
@@ -10,7 +11,7 @@ extern "C" {
 #endif
 
 typedef struct {
-  PyObject_HEAD StrictModuleChecker* checker;
+  PyObject_HEAD strictmod::compiler::ModuleLoader* checker;
 } StrictModuleLoaderObject;
 
 typedef struct {
