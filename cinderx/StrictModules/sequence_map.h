@@ -164,18 +164,13 @@ class sequence_map {
   }
 
   T& operator[](const Key& key) {
-    auto map_it = map.find(key);
-    if (map_it == map.end()) {
-      auto& resPair = map[key];
-      // XXX: not sure how to avoid a second find here
-      auto inserted_it = map.find(key);
-      // store pointer to avoid copying
-      order.push_back(&(inserted_it->first));
-      resPair.second = std::prev(order.end());
-      return resPair.first;
+    auto emplaced = map.try_emplace(key);
+    if (emplaced.second) {
+      emplaced.first->second.second =
+        // store pointer to avoid copying
+        order.emplace(order.end(), &(emplaced.first->first));
     }
-
-    return map_it->second.first;
+    return emplaced.first->second.first;
   }
 
   T at(const Key& key) {
