@@ -245,7 +245,6 @@ AnalyzedModule* ModuleLoader::loadSingleModule(const std::string& modName) {
   // look for pys (strict module specific) stub
   auto stubModInfo =
       findModule(modName, stubImportPath_, FileSuffixKind::kStrictStubFile);
-  log("Looking for a stub for %s", modName.c_str());
   bool stubIsNamespacePackage = false;
   if (stubModInfo) {
     stubModInfo = getStubModuleInfo(std::move(stubModInfo), this);
@@ -254,6 +253,7 @@ AnalyzedModule* ModuleLoader::loadSingleModule(const std::string& modName) {
     }
     stubIsNamespacePackage =
         std::filesystem::is_directory(stubModInfo->getFilename());
+    log("Found a stub for %s", modName.c_str());
   } else {
     log("Did not find a stub for %s", modName.c_str());
   }
@@ -503,8 +503,6 @@ AnalyzedModule* ModuleLoader::analyze(std::unique_ptr<ModuleInfo> modInfo) {
   const std::string& name = moduleInfo.getModName();
   const std::string& filename = moduleInfo.getFilename();
 
-  log("Analyzing module: %s (from %s)", name.c_str(), filename.c_str());
-
   // if `name` already exist in `modules_`, do not override the existing one
   // but if there were no AST or filename is different, update the AST
   auto existingModIt = modules_.find(name);
@@ -575,9 +573,10 @@ AnalyzedModule* ModuleLoader::analyze(std::unique_ptr<ModuleInfo> modInfo) {
         moduleInfo.getFutureAnnotations());
 
     if (should_analyze == ShouldAnalyze::kYes) {
+      log("Analyzing module: %s (from %s)", name.c_str(), filename.c_str());
       analyzer.analyze();
     } else {
-      log("Skipping analysis for module module: %s (from %s)",
+      log("Skipping analysis for module: %s (from %s)",
           name.c_str(),
           filename.c_str());
     }

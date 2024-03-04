@@ -1193,14 +1193,16 @@ AnalysisResult Analyzer::visitAttribute(const expr_ty expr) {
   auto result = iLoadAttr(value, attrName, nullptr, context_);
   if (!result) {
     auto typeName = value->getTypeRef().getName();
-    log("%s: Encountered an AttributeError (%s has no %s)",
+    log("%s: Encountered an AttributeError (%s '%s' has no '%s')",
         context_.filename.c_str(),
         typeName.c_str(),
+        value->getDisplayName().c_str(),
         attrName);
     context_.raiseExceptionStr(
         AttributeErrorType(),
-        "{} object has no attribute {}",
+        "{} object '{}' has no attribute '{}'",
         typeName,
+        value->getDisplayName(),
         attrName);
   }
   return result;
