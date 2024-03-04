@@ -406,6 +406,18 @@ std::shared_ptr<StrictType> ValueErrorType() {
   return t;
 }
 
+std::shared_ptr<StrictType> ImportErrorType() {
+  static std::shared_ptr<StrictType> t = makeType<StrictExceptionType>(
+      "ImportError", kBuiltinsModule, TObjectPtrVec{ExceptionType()}, TypeType());
+  return t;
+}
+
+std::shared_ptr<StrictType> ModuleNotFoundErrorType() {
+  static std::shared_ptr<StrictType> t = makeType<StrictExceptionType>(
+      "ModuleNotFoundError", kBuiltinsModule, TObjectPtrVec{ImportErrorType()}, TypeType());
+  return t;
+}
+
 std::shared_ptr<StrictType> NameErrorType() {
   static std::shared_ptr<StrictType> t = makeType<StrictExceptionType>(
       "NameError", kBuiltinsModule, TObjectPtrVec{ExceptionType()}, TypeType());
@@ -851,6 +863,8 @@ bool initializeBuiltinsModuleDict() {
         {"AttributeError", AttributeErrorType()},
         {"ValueError", ValueErrorType()},
         {"NameError", NameErrorType()},
+        {"ImportError", ImportErrorType()},
+        {"ModuleNotFound", ModuleNotFoundErrorType()},
         {"NotImplementedError", NotImplementedErrorType()},
         {"StopIteration", StopIterationType()},
         {"KeyError", KeyErrorType()},
@@ -921,6 +935,8 @@ std::shared_ptr<StrictType> getExceptionFromString(
       {"AttributeError", AttributeErrorType()},
       {"ValueError", ValueErrorType()},
       {"NameError", NameErrorType()},
+      {"ImportError", ImportErrorType()},
+      {"ModuleNotFoundError", ModuleNotFoundErrorType()},
       {"NotImplementedError", NotImplementedErrorType()},
       {"StopIteration", StopIterationType()},
       {"KeyError", KeyErrorType()},
