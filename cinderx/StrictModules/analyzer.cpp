@@ -336,51 +336,86 @@ void Analyzer::visitImportFrom(const stmt_ty stmt) {
     alias_ty alias =
         reinterpret_cast<alias_ty>(asdl_seq_GET(importFrom.names, i));
     std::string aliasName = PyUnicode_AsUTF8(alias->name);
-    if (aliasName == "*") {
-      // star import is prohibited
-      context_.error<StarImportDisallowedException>(importedName);
-      continue;
-    }
     std::string displayName = std::string(importFrom.level, '.') + fromName;
-    std::string nameToStore = importedNameHelper(alias);
-
-    AnalysisResult modValue;
-    if (mod != nullptr) {
-      modValue = iImportFrom(mod, aliasName, context_, loader_);
-    } else if (useLazy) {
-      std::string unknownName;
-      if (alias->asname == nullptr) {
-        unknownName =
-            fmt::format("<{} imported from {}>", aliasName, displayName);
-      } else {
-        unknownName = fmt::format(
-            "<{} imported from {} as {}>", aliasName, displayName, nameToStore);
+    if (aliasName == "*") {
+      if (!stack_.isGlobalScope()) {
+        context_.error<StarImportDisallowedException>(displayName);
+        continue;
       }
-      modValue = std::make_shared<StrictLazyObject>(
-          LazyObjectType(),
-          context_.caller,
-          loader_,
-          importedName,
-          std::move(unknownName),
-          context_,
-          aliasName);
-      loader_->recordLazyModule(importedName);
-    }
-
-    if (modValue != nullptr) {
-      stack_.set(std::move(nameToStore), std::move(modValue));
-    } else if (alias->asname == nullptr) {
-      AnalysisResult unknown = makeUnknown(
-          context_, "<{} imported from {}>", aliasName, displayName);
-      stack_.set(std::move(nameToStore), std::move(unknown));
+      if (mod == nullptr) {
+        mod = loader_->loadModuleValue(importedName);
+        if (mod == nullptr) {
+          context_.error<StarImportDisallowedException>(importedName);
+          continue;
+        }
+      }
+      bool skip_leading_underscores = false;
+      auto all = iLoadAttr(mod, "__all__", nullptr, context_);
+      if (all == nullptr) {
+        all = iLoadAttr(mod, "__dict__", nullptr, context_);
+        skip_leading_underscores = true;
+      }
+      auto v = iGetElementsVec(all, context_);
+      for (auto& nameObj : v) {
+        auto sectionStr = std::dynamic_pointer_cast<StrictString>(nameObj);
+        auto name = sectionStr ? sectionStr->getValue() : nameObj->getDisplayName();
+        if (skip_leading_underscores && name.size() > 0 && name[0] == '_') {
+          continue;
+        }
+        log("::: %s from %s", name.c_str(), displayName.c_str());
+        AnalysisResult modValue;
+        modValue = iImportFrom(mod, name, context_, loader_);
+        if (modValue != nullptr) {
+          stack_.getGlobalScope()->set(name, std::move(modValue));
+        } else {
+          AnalysisResult unknown = makeUnknown(
+              context_,
+              "<{} imported from {}>",
+              name,
+              displayName);
+          stack_.getGlobalScope()->set(name, std::move(unknown));
+        }
+      }
     } else {
-      AnalysisResult unknown = makeUnknown(
-          context_,
-          "<{} imported from {} as {}>",
-          aliasName,
-          displayName,
-          nameToStore);
-      stack_.set(std::move(nameToStore), std::move(unknown));
+      std::string nameToStore = importedNameHelper(alias);
+
+      AnalysisResult modValue;
+      if (mod != nullptr) {
+        modValue = iImportFrom(mod, aliasName, context_, loader_);
+      } else if (useLazy) {
+        std::string unknownName;
+        if (alias->asname == nullptr) {
+          unknownName =
+              fmt::format("<{} imported from {}>", aliasName, displayName);
+        } else {
+          unknownName = fmt::format(
+              "<{} imported from {} as {}>", aliasName, displayName, nameToStore);
+        }
+        modValue = std::make_shared<StrictLazyObject>(
+            LazyObjectType(),
+            context_.caller,
+            loader_,
+            importedName,
+            std::move(unknownName),
+            context_,
+            aliasName);
+        loader_->recordLazyModule(importedName);
+      }
+      if (modValue != nullptr) {
+        stack_.set(std::move(nameToStore), std::move(modValue));
+      } else if (alias->asname == nullptr) {
+        AnalysisResult unknown = makeUnknown(
+            context_, "<{} imported from {}>", aliasName, displayName);
+        stack_.set(std::move(nameToStore), std::move(unknown));
+      } else {
+        AnalysisResult unknown = makeUnknown(
+            context_,
+            "<{} imported from {} as {}>",
+            aliasName,
+            displayName,
+            nameToStore);
+        stack_.set(std::move(nameToStore), std::move(unknown));
+      }
     }
   }
 }
