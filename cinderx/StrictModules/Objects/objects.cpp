@@ -752,6 +752,33 @@ std::shared_ptr<BaseStrictObject> StrictLooseIsinstance() {
   return o;
 }
 
+std::shared_ptr<BaseStrictObject> DunderImport() {
+  static std::shared_ptr<BaseStrictObject> o(new StrictBuiltinFunctionOrMethod(
+      kBuiltinsModule,
+      CallableWrapper(dunderImport, "__import__"),
+      nullptr,
+      "__import__"));
+  return o;
+}
+
+std::shared_ptr<BaseStrictObject> Globals() {
+  static std::shared_ptr<BaseStrictObject> o(new StrictBuiltinFunctionOrMethod(
+      kBuiltinsModule,
+      CallableWrapper(globals, "globals"),
+      nullptr,
+      "globals"));
+  return o;
+}
+
+std::shared_ptr<BaseStrictObject> Locals() {
+  static std::shared_ptr<BaseStrictObject> o(new StrictBuiltinFunctionOrMethod(
+      kBuiltinsModule,
+      CallableWrapper(locals, "locals"),
+      nullptr,
+      "locals"));
+  return o;
+}
+
 std::shared_ptr<BaseStrictObject> StrictTryImport() {
   static std::shared_ptr<BaseStrictObject> o(new StrictBuiltinFunctionOrMethod(
       kBuiltinsModule,
@@ -873,6 +900,9 @@ bool initializeBuiltinsModuleDict() {
         {"_known_unknown_obj", StrictKnownUnknownObj()},
         {"_known_unknown_callable", StrictKnownUnknownCallable()},
         {"loose_isinstance", StrictLooseIsinstance()},
+        {"globals", Globals()},
+        {"locals", Locals()},
+        {"__import__", DunderImport()},
         {"__strict_tryimport__", StrictTryImport()},
         {"__strict_object__", ObjectType()},
         {"__strict_copy__", StrictCopy()},

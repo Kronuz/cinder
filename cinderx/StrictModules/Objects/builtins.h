@@ -173,6 +173,19 @@ std::shared_ptr<BaseStrictObject> allImpl(
     const CallerContext& caller,
     std::shared_ptr<BaseStrictObject> iterable);
 
+std::shared_ptr<BaseStrictObject> dunderImport(
+    std::shared_ptr<BaseStrictObject>,
+    const CallerContext& caller,
+    std::shared_ptr<BaseStrictObject> moduleName);
+
+std::shared_ptr<BaseStrictObject> globals(
+    std::shared_ptr<BaseStrictObject>,
+    const CallerContext& caller);
+
+std::shared_ptr<BaseStrictObject> locals(
+    std::shared_ptr<BaseStrictObject>,
+    const CallerContext& caller);
+
 /** An version of isinstance that does not raise error
     for unknowns, but return False instead.
     This can only be used in stubs to imitate what otherwise
