@@ -260,11 +260,12 @@ std::unique_ptr<ModuleInfo> getStubModuleInfo(
     // In the case of fullly implicit stubs, use the original source AST
     std::unique_ptr<ModuleInfo> sourceInfo = getSourceModuleInfo(
         info->getModName(), FileSuffixKind::kPythonFile, loader);
-    sourceInfo->setModName(info->getModName());
-    sourceInfo->setFilename(info->getFilename());
-    sourceInfo->setStubKind(StubKind::getStubKind(info->getFilename(), false));
-    sourceInfo->setSubmoduleSearchLocations(
-        info->getSubmoduleSearchLocations());
+    if (sourceInfo) {
+      sourceInfo->setModName(info->getModName());
+      sourceInfo->setFilename(info->getFilename());
+      sourceInfo->setStubKind(StubKind::getStubKind(info->getFilename(), false));
+      sourceInfo->setSubmoduleSearchLocations(info->getSubmoduleSearchLocations());
+    }
     return sourceInfo;
   }
 
