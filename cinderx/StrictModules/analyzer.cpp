@@ -259,40 +259,65 @@ void Analyzer::visitImport(const stmt_ty stmt) {
    * the only purpose of loading the full submodule here is to match
    * the runtime in failing the import if it doesn't exist.
    */
+  bool useLazy = stack_.isGlobalScope();
   auto importNames = stmt->v.Import.names;
-  Py_ssize_t n = asdl_seq_LEN(importNames);
-  for (int i = 0; i < n; ++i) {
+  auto n = asdl_seq_LEN(importNames);
+  for (auto i = 0; i < n; ++i) {
     alias_ty alias = reinterpret_cast<alias_ty>(asdl_seq_GET(importNames, i));
     std::string modName(PyUnicode_AsUTF8(alias->name));
-    std::shared_ptr<StrictModuleObject> leafMod =
-        loader_->loadModuleValue(modName);
-    std::shared_ptr<BaseStrictObject> mod;
     std::string asName = importedNameHelper(alias);
-    std::size_t split = modName.find('.');
-    std::string baseName = modName.substr(0, split);
-    if (leafMod != nullptr) {
-      mod = loader_->loadModuleValue(baseName);
-      if (alias->asname != nullptr) {
-        while (split != std::string::npos) {
-          if (mod == nullptr) {
-            break;
+    std::shared_ptr<BaseStrictObject> mod;
+    if (!useLazy) {
+      std::shared_ptr<StrictModuleObject> leafMod =
+          loader_->loadModuleValue(modName);
+      std::size_t split = modName.find('.');
+      std::string baseName = modName.substr(0, split);
+      if (leafMod != nullptr) {
+        mod = loader_->loadModuleValue(baseName);
+        if (alias->asname != nullptr) {
+          while (split != std::string::npos) {
+            if (mod == nullptr) {
+              break;
+            }
+            std::size_t nextSplit = modName.find('.', split + 1);
+            mod = iImportFrom(
+                std::move(mod),
+                modName.substr(split + 1, nextSplit),
+                context_,
+                loader_);
+            split = nextSplit;
           }
-          std::size_t nextSplit = modName.find('.', split + 1);
-          mod = iImportFrom(
-              std::move(mod),
-              modName.substr(split + 1, nextSplit),
-              context_,
-              loader_);
-          split = nextSplit;
         }
       }
+      if (mod == nullptr && alias->asname == nullptr) {
+        mod = makeUnknown(context_, "<imported module {}>", baseName);
+      } else if (mod == nullptr) {
+        mod =
+            makeUnknown(context_, "<imported module {} as {}>", modName, asName);
+      }
+
+    } else {
+      std::string unknownName;
+      if (alias->asname == nullptr) {
+        unknownName =
+            fmt::format("<imported module {}>", modName);
+      } else {
+        unknownName = fmt::format(
+            "<imported module {} as {}>", modName, asName);
+      }
+      std::optional<std::string> attrName = std::nullopt;
+      if (alias->asname != nullptr) attrName = std::string("");
+      mod = std::make_shared<StrictLazyObject>(
+          LazyObjectType(),
+          context_.caller,
+          loader_,
+          modName,
+          std::move(unknownName),
+          context_,
+          attrName);
+      loader_->recordLazyModule(modName);
     }
-    if (mod == nullptr && alias->asname == nullptr) {
-      mod = makeUnknown(context_, "<imported module {}>", baseName);
-    } else if (mod == nullptr) {
-      mod =
-          makeUnknown(context_, "<imported module {} as {}>", modName, asName);
-    }
+    
     stack_.set(std::move(asName), std::move(mod));
   }
 }
@@ -362,7 +387,6 @@ void Analyzer::visitImportFrom(const stmt_ty stmt) {
         if (skip_leading_underscores && name.size() > 0 && name[0] == '_') {
           continue;
         }
-        log("::: %s from %s", name.c_str(), displayName.c_str());
         AnalysisResult modValue;
         modValue = iImportFrom(mod, name, context_, loader_);
         if (modValue != nullptr) {
