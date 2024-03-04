@@ -51,7 +51,7 @@ std::shared_ptr<BaseStrictObject> iLoadAttrOnType(
     std::shared_ptr<BaseStrictObject> defaultValue,
     const CallerContext& caller) {
   if (obj->isUnknown()) {
-    caller.error<UnknownValueAttributeException>(obj->getDisplayName(), key);
+//    caller.error<UnknownValueAttributeException>(obj->getDisplayName(), key);
   }
   auto objType = obj->getType();
   auto descr = objType->typeLookup(key, caller);

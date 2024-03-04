@@ -189,8 +189,8 @@ std::shared_ptr<BaseStrictObject> StrictDict::dict__getitem__(
   auto got = self->data_->get(key);
   if (got == std::nullopt) {
     if (key->getType() == UnknownType()) {
-      caller.error<UnknownValueAttributeException>(
-          key->getDisplayName(), "__hash__");
+//      caller.error<UnknownValueAttributeException>(
+//          key->getDisplayName(), "__hash__");
       return makeUnknown(
           caller, "{}[{}]", self->getDisplayName(), key->getDisplayName());
     }
@@ -213,8 +213,8 @@ std::shared_ptr<BaseStrictObject> StrictDict::dict__setitem__(
     std::shared_ptr<BaseStrictObject> value) {
   auto keyType = key->getType();
   if (keyType == UnknownType()) {
-    caller.error<UnknownValueAttributeException>(
-        key->getDisplayName(), "__hash__");
+//    caller.error<UnknownValueAttributeException>(
+//        key->getDisplayName(), "__hash__");
     return NoneObject();
   }
   checkExternalModification(self, caller);
@@ -234,8 +234,8 @@ std::shared_ptr<BaseStrictObject> StrictDict::dict__delitem__(
     std::shared_ptr<BaseStrictObject> key) {
   auto keyType = key->getType();
   if (keyType == UnknownType()) {
-    caller.error<UnknownValueAttributeException>(
-        key->getDisplayName(), "__hash__");
+//    caller.error<UnknownValueAttributeException>(
+//        key->getDisplayName(), "__hash__");
     return NoneObject();
   }
   checkExternalModification(self, caller);
@@ -254,8 +254,8 @@ std::shared_ptr<BaseStrictObject> StrictDict::dict__contains__(
     const CallerContext& caller,
     std::shared_ptr<BaseStrictObject> key) {
   if (key->getType() == UnknownType()) {
-    caller.error<UnknownValueAttributeException>(
-        key->getDisplayName(), "__hash__");
+//    caller.error<UnknownValueAttributeException>(
+//        key->getDisplayName(), "__hash__");
     return StrictFalse();
   }
   if (self->data_->contains(std::move(key))) {
@@ -273,8 +273,8 @@ std::shared_ptr<BaseStrictObject> StrictDict::dictGet(
     defaultValue = NoneObject();
   }
   if (key->getType() == UnknownType()) {
-    caller.error<UnknownValueAttributeException>(
-        key->getDisplayName(), "__hash__");
+//    caller.error<UnknownValueAttributeException>(
+//        key->getDisplayName(), "__hash__");
     return defaultValue;
   }
   auto got = self->data_->get(std::move(key));
@@ -290,8 +290,8 @@ std::shared_ptr<BaseStrictObject> StrictDict::dictSetDefault(
     std::shared_ptr<BaseStrictObject> key,
     std::shared_ptr<BaseStrictObject> value) {
   if (key->getType() == UnknownType()) {
-    caller.error<UnknownValueAttributeException>(
-        key->getDisplayName(), "__hash__");
+//    caller.error<UnknownValueAttributeException>(
+//        key->getDisplayName(), "__hash__");
     return value;
   }
   checkExternalModification(self, caller);

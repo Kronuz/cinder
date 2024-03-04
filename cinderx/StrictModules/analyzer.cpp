@@ -822,7 +822,7 @@ void Analyzer::visitClassDef(const stmt_ty stmt) {
   auto baseTupleObj =
       std::make_shared<StrictTuple>(TupleType(), context_.caller, bases);
   if (metaclass->getType() == UnknownType()) {
-    context_.error<UnknownValueCallException>(metaclass->getDisplayName());
+//    context_.error<UnknownValueCallException>(metaclass->getDisplayName());
   } else {
     auto prepareFunc = iLoadAttr(metaclass, "__prepare__", nullptr, context_);
     if (prepareFunc != nullptr) {
