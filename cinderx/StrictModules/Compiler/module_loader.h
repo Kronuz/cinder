@@ -23,6 +23,11 @@ enum class AllowListKind { kPrefix, kExact };
 const std::string& getFileSuffixKindName(FileSuffixKind kind);
 
 class ModuleLoader {
+  static std::shared_ptr<BaseErrorSink> defaultErrorSinkFactory() {
+    static std::shared_ptr<BaseErrorSink> factory = std::make_shared<CollectingErrorSink>();
+    return factory;
+  }
+
  public:
   typedef std::function<bool(const std::string&, const std::string&)>
       ForceStrictFunc;
@@ -40,7 +45,7 @@ class ModuleLoader {
             std::move(stubImportPath),
             std::move(allowList),
             std::nullopt,
-            [] { return std::make_unique<CollectingErrorSink>(); }) {}
+            defaultErrorSinkFactory) {}
 
   ModuleLoader(
       std::vector<std::string> importPath,
@@ -52,7 +57,7 @@ class ModuleLoader {
             std::move(stubImportPath),
             std::move(allowList),
             forceStrict,
-            [] { return std::make_unique<CollectingErrorSink>(); }) {}
+            defaultErrorSinkFactory) {}
 
   ModuleLoader(
       std::vector<std::string> importPath,
