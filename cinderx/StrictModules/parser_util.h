@@ -32,9 +32,9 @@ struct AstAndSymbols {
 };
 
 std::optional<AstAndSymbols> readFromFile(
-    const char* filenameStr,
+    const std::string& filenameStr,
     PyArena* arena,
-    const std::vector<std::string>& checkSubStrings);
+    const std::vector<const std::string>& checkSubStrings);
 
 std::optional<AstAndSymbols> readFromSource(
     const char* source,

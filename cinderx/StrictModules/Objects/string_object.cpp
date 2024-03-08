@@ -263,8 +263,8 @@ std::shared_ptr<BaseStrictObject> StrictString::str__getitem__(
       caller.raiseTypeError(
           "string index out of range: {}", intIndex->getDisplayName());
     }
-    int idx = normalizeIndex(*intIndex->getValue(), data.size());
-    if (idx >= 0 && (size_t)idx < data.size()) {
+    size_t idx = normalizeIndex(*intIndex->getValue(), data.size());
+    if (idx >= 0 && idx < data.size()) {
       return caller.makeStr(data.substr(idx, 1));
     } else {
       caller.raiseTypeError("string index out of range: {}", idx);

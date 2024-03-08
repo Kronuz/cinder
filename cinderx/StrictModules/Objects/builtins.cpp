@@ -1,8 +1,8 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 #include "cinderx/StrictModules/Objects/builtins.h"
 
-#include "cinderx/StrictModules/Compiler/abstract_module_loader.h"
 #include "cinderx/StrictModules/Compiler/module_info.h"
+#include "cinderx/StrictModules/Compiler/module_loader.h"
 #include "cinderx/StrictModules/Objects/callable_wrapper.h"
 #include "cinderx/StrictModules/Objects/object_interface.h"
 #include "cinderx/StrictModules/Objects/objects.h"
@@ -468,7 +468,7 @@ std::shared_ptr<BaseStrictObject> chrImpl(
     caller.raiseExceptionStr(
         ValueErrorType(), "chr arg {} not in range", iInt->getDisplayName());
   }
-  Ref<> resPyObj = Ref<>::steal(PyUnicode_FromOrdinal(*v));
+  Ref<> resPyObj = Ref<>::steal(PyUnicode_FromOrdinal((int)*v));
   return StrictString::strFromPyObj(std::move(resPyObj), caller);
 }
 
@@ -759,6 +759,33 @@ std::shared_ptr<BaseStrictObject> looseIsinstance(
   }
 
   return isinstanceImpl(nullptr, caller, std::move(inst), std::move(clsInfo));
+}
+
+std::shared_ptr<BaseStrictObject> dunderImport(
+    std::shared_ptr<BaseStrictObject>,
+    // const std::vector<std::shared_ptr<BaseStrictObject>>& args,
+    // const std::vector<std::string>& namedArgs,
+    const CallerContext& caller,
+    std::shared_ptr<BaseStrictObject> moduleName) {
+  auto moduleNameStr = std::dynamic_pointer_cast<StrictString>(moduleName);
+  auto name = moduleNameStr ? moduleNameStr->getValue() : moduleName->getDisplayName();
+  return caller.loader->loadModuleValue(name);
+}
+
+std::shared_ptr<BaseStrictObject> globals(
+    std::shared_ptr<BaseStrictObject>,
+    const CallerContext& caller) {
+  auto mod = caller.caller.lock();
+  if (mod == nullptr) {
+    return makeUnknown(caller, "globals()");
+  }
+  return mod->getDunderDict();
+}
+
+std::shared_ptr<BaseStrictObject> locals(
+    std::shared_ptr<BaseStrictObject>,
+    const CallerContext& caller) {
+  return makeUnknown(caller, "locals()");
 }
 
 std::shared_ptr<BaseStrictObject> strictCopy(

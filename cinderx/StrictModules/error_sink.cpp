@@ -6,7 +6,7 @@ bool BaseErrorSink::hasError() const {
   return !errors_.empty();
 }
 
-int BaseErrorSink::getErrorCount() const {
+size_t BaseErrorSink::getErrorCount() const {
   return errors_.size();
 }
 

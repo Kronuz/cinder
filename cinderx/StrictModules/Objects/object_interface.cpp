@@ -1,8 +1,9 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 #include "cinderx/StrictModules/Objects/object_interface.h"
 
-#include "cinderx/StrictModules/Compiler/abstract_module_loader.h"
+#include "cinderx/StrictModules/Compiler/module_loader.h"
 #include "cinderx/StrictModules/Objects/base_object.h"
+#include "cinderx/StrictModules/Compiler/module_loader.h"
 #include "cinderx/StrictModules/Objects/objects.h"
 #include "cinderx/StrictModules/Objects/type.h"
 
@@ -50,7 +51,7 @@ std::shared_ptr<BaseStrictObject> iLoadAttrOnType(
     std::shared_ptr<BaseStrictObject> defaultValue,
     const CallerContext& caller) {
   if (obj->isUnknown()) {
-    caller.error<UnknownValueAttributeException>(obj->getDisplayName(), key);
+//    caller.error<UnknownValueAttributeException>(obj->getDisplayName(), key);
   }
   auto objType = obj->getType();
   auto descr = objType->typeLookup(key, caller);

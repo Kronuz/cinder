@@ -3,13 +3,9 @@
 
 // Including this here is a hack until _strictmodule.c is migrated to CinderX
 #include "cinder/exports.h"
-#include "cinderx/StrictModules/pystrictmodule.h"
-#include "cinderx/StrictModules/strict_module_checker_interface.h"
+#include "cinderx/pystrictmodule.h"
 
 #ifndef Py_LIMITED_API
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 PyDoc_STRVAR(strictmodule_doc, "Strict Module related types and methods");
 
@@ -69,7 +65,7 @@ fail:
 }
 
 static struct PyModuleDef_Slot strictmodule_slots[] = {
-    {Py_mod_exec, strictmodule_exec},
+    {Py_mod_exec, (void*)strictmodule_exec},
     {0, NULL},
 };
 
@@ -90,7 +86,4 @@ PyMODINIT_FUNC PyInit__strictmodule(void) {
   return PyModuleDef_Init(&strictmodulemodule);
 }
 
-#ifdef __cplusplus
-}
-#endif
 #endif /* Py_LIMITED_API */

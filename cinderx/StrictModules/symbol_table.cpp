@@ -97,7 +97,7 @@ int SymtableEntry::getFunctionCodeFlag() const {
 
 std::vector<PyObject*> SymtableEntry::getFunctionVarNames() {
   Ref<> keys = Ref<>::steal(PyDict_Keys(entry_->ste_symbols));
-  int keySize = PyList_Size(keys.get());
+  Py_ssize_t keySize = PyList_Size(keys.get());
   std::vector<PyObject*> varnames;
 
   for (int i = 0; i < keySize; ++i) {

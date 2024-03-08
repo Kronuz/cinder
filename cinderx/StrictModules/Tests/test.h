@@ -4,8 +4,8 @@
 /** Include this file instead of including the gtest headers to
 avoid macro naming conflict between gtest and python ast.h
 */
-#include "cinderx/StrictModules/Compiler/abstract_module_loader.h"
 #include "cinderx/StrictModules/Compiler/module_info.h"
+#include "cinderx/StrictModules/Compiler/module_loader.h"
 #include "cinderx/StrictModules/Tests/test_util.h"
 #include "cinderx/StrictModules/analyzer.h"
 #include "cinderx/StrictModules/error_sink.h"
@@ -158,19 +158,19 @@ class ModuleLoaderTest : public PythonTest {
     return loader;
   }
 
-  std::unique_ptr<strictmod::compiler::AnalyzedModule>
+  std::shared_ptr<strictmod::compiler::AnalyzedModule>
   loadFile(const char* name, const char* importPath, const char* stubPath) {
     auto loader = getLoader(importPath, stubPath);
     loader->loadModule(name);
     return loader->passModule(name);
   }
 
-  std::unique_ptr<strictmod::compiler::AnalyzedModule> loadFile(
+  std::shared_ptr<strictmod::compiler::AnalyzedModule> loadFile(
       const char* name) {
     return loadFile(name, nullptr, nullptr);
   }
 
-  std::unique_ptr<strictmod::compiler::AnalyzedModule> loadSingleFile(
+  std::shared_ptr<strictmod::compiler::AnalyzedModule> loadSingleFile(
       const char* name,
       const char* importPath,
       const char* stubPath) {
@@ -179,7 +179,7 @@ class ModuleLoaderTest : public PythonTest {
     return loader->passModule(name);
   }
 
-  std::unique_ptr<strictmod::compiler::AnalyzedModule> loadSingleFile(
+  std::shared_ptr<strictmod::compiler::AnalyzedModule> loadSingleFile(
       const char* name) {
     return loadSingleFile(name, nullptr, nullptr);
   }

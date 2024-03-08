@@ -1,13 +1,10 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
-#include "cinderx/StrictModules/pystrictmodule.h"
+#include "cinderx/pystrictmodule.h"
 
 #include "cinderx/StrictModules/pycore_dependencies.h"
 #include "structmember.h"
 
 #ifndef Py_LIMITED_API
-#ifdef __cplusplus
-extern "C" {
-#endif
 
 // Analysis Result
 static PyObject* AnalysisResult_new(PyTypeObject* type, PyObject*, PyObject*) {
@@ -92,7 +89,7 @@ static PyObject* create_AnalysisResult_Helper(
 }
 
 static PyObject* create_AnalysisResult(
-    StrictAnalyzedModule* mod,
+    strictmod::compiler::AnalyzedModule* mod,
     PyObject* module_name,
     PyObject* errors,
     PyArena* arena) {
@@ -103,11 +100,21 @@ static PyObject* create_AnalysisResult(
         0, module_name, NULL, 0, 0, NULL, NULL, errors);
   }
   // all interface functions return new references
-  PyObject* filename = StrictAnalyzedModule_GetFilename(mod);
-  int mod_kind = StrictAnalyzedModule_GetModuleKind(mod);
-  int stub_kind = StrictAnalyzedModule_GetStubKind(mod);
-  PyObject* ast = StrictAnalyzedModule_GetAST(mod, arena);
-  PyObject* symtable = StrictAnalyzedModule_GetSymtable(mod);
+  const auto& fileStr = mod->getModuleInfo().getFilename();
+  PyObject* filename = PyUnicode_FromString(fileStr.c_str());
+
+  int mod_kind = mod->getModKindAsInt();
+  int stub_kind = mod->getStubKindAsInt();
+    
+  Ref<> result = mod->getPyAst(arena);
+  PyObject* ast = result.release();
+
+  PyObject* symtable = nullptr;
+  if (auto st = mod->getModuleInfo().getSymtable()) {
+    symtable = (PyObject*)st->st_top;
+    Py_INCREF(symtable);
+  }
+    
   Py_INCREF(module_name);
   Py_INCREF(errors);
   return create_AnalysisResult_Helper(
@@ -243,30 +250,24 @@ StrictModuleLoaderObject_new(PyTypeObject* type, PyObject*, PyObject*) {
   self = (StrictModuleLoaderObject*)type->tp_alloc(type, 0);
   if (self == NULL)
     return NULL;
-  self->checker = StrictModuleChecker_New();
+  self->checker = new strictmod::compiler::ModuleLoader();
   return (PyObject*)self;
 }
 
-static int
-PyListToCharArray(PyObject* pyList, const char** arr, Py_ssize_t size) {
-  int _i;
-  PyObject* elem;
-  for (_i = 0; _i < size; _i++) {
-    elem = PyList_GetItem(pyList, _i);
+static std::vector<std::string>
+PyListToVector(PyObject* pyList) {
+  Py_ssize_t size = PyList_GET_SIZE(pyList);
+  std::vector<std::string> vector(size);
+  for (int i = 0; i < size; ++i) {
+    PyObject* elem = PyList_GetItem(pyList, i);
     if (!PyUnicode_Check(elem)) {
-      PyErr_Format(
-          PyExc_TypeError,
-          "import path is expect to be str, but got %s object",
-          elem->ob_type->tp_name);
-      return -1;
+        throw std::runtime_error(
+             fmt::format("import path is expect to be str, but got {} object",
+                         elem->ob_type->tp_name));
     }
-    const char* elem_str = PyUnicode_AsUTF8(elem);
-    if (elem_str == NULL) {
-      return -1;
-    }
-    arr[_i] = elem_str;
+    vector.emplace_back(PyUnicode_AsUTF8(elem));
   }
-  return 0;
+  return vector;
 }
 
 static int StrictModuleLoaderObject_init(
@@ -340,123 +341,65 @@ static int StrictModuleLoaderObject_init(
         stub_import_path_obj);
     return -1;
   }
-
-  // Import paths
-  Py_ssize_t import_size = PyList_GET_SIZE(import_paths_obj);
-  const char* import_paths_arr[import_size];
-  if (PyListToCharArray(import_paths_obj, import_paths_arr, import_size) < 0) {
-    return -1;
-  }
-
-  if (StrictModuleChecker_SetImportPaths(
-          self->checker, import_paths_arr, import_size) < 0) {
-    PyErr_SetString(
-        PyExc_RuntimeError,
-        "failed to set import paths on StrictModuleLoader object");
-    return -1;
-  }
-  // allowlist for module names
-  Py_ssize_t allow_list_size = PyList_GET_SIZE(allow_list_obj);
-  const char* allow_list_arr[allow_list_size];
-  if (PyListToCharArray(allow_list_obj, allow_list_arr, allow_list_size) < 0) {
-    return -1;
-  }
-
-  if (StrictModuleChecker_SetAllowListPrefix(
-          self->checker, allow_list_arr, allow_list_size) < 0) {
-    PyErr_SetString(
-        PyExc_RuntimeError,
-        "failed to set allowlist on StrictModuleLoader object");
-    return -1;
-  }
-  // allowlist for exact module names
-  Py_ssize_t allow_list_exact_size = PyList_GET_SIZE(allow_list_exact_obj);
-  const char* allow_list_exact_arr[allow_list_exact_size];
-  if (PyListToCharArray(
-          allow_list_exact_obj, allow_list_exact_arr, allow_list_exact_size) <
-      0) {
-    return -1;
-  }
-
-  if (StrictModuleChecker_SetAllowListExact(
-          self->checker, allow_list_exact_arr, allow_list_exact_size) < 0) {
-    PyErr_SetString(
-        PyExc_RuntimeError,
-        "failed to set allowlist on StrictModuleLoader object");
-    return -1;
-  }
-
-  if (allow_list_regex_obj != nullptr) {
-    Py_ssize_t allow_list_regex_size = PyList_GET_SIZE(allow_list_regex_obj);
-    const char* allow_list_regex_arr[allow_list_regex_size];
-    if (PyListToCharArray(
-            allow_list_regex_obj, allow_list_regex_arr, allow_list_regex_size) <
-        0) {
+  
+  try {
+    // Import paths
+    self->checker->setImportPath(PyListToVector(import_paths_obj));
+    
+    // allowlist for module names
+    self->checker->setAllowListPrefix(PyListToVector(allow_list_obj));
+    
+    // allowlist for exact module names
+    self->checker->setAllowListExact(PyListToVector(allow_list_exact_obj));
+    
+    if (allow_list_regex_obj != nullptr) {
+      // allowlist for regex module names
+      self->checker->setAllowListRegex(PyListToVector(allow_list_regex_obj));
+    }
+    
+    // stub paths
+    self->checker->setStubImportPath(PyUnicode_AsUTF8(stub_import_path_obj));
+    
+    // enable verbose logging
+    int should_enable_verbose_logging = PyObject_IsTrue(verbose_logging);
+    if (should_enable_verbose_logging < 0) {
+      PyErr_SetString(PyExc_RuntimeError,
+                      "error checking 'verbose_logging' on StrictModuleLoader");
       return -1;
     }
-    if (StrictModuleChecker_SetAllowListRegex(
-            self->checker, allow_list_regex_arr, allow_list_regex_size) < 0) {
-      PyErr_SetString(
-          PyExc_RuntimeError,
-          "failed to set the regex allowlist on StrictModuleLoader object");
+    if (should_enable_verbose_logging) {
+      self->checker->enableVerboseLogging();
+    }
+    
+    // disable analysis
+    int should_disable_analysis = PyObject_IsTrue(disable_analysis);
+    if (should_disable_analysis < 0) {
+      PyErr_SetString(PyExc_RuntimeError,
+                      "error checking 'disable_analysis' on StrictModuleLoader");
       return -1;
     }
-  }
-
-  // stub paths
-  const char* stub_str = PyUnicode_AsUTF8(stub_import_path_obj);
-  if (stub_str == NULL) {
-    return -1;
-  }
-  int stub_path_set =
-      StrictModuleChecker_SetStubImportPath(self->checker, stub_str);
-  if (stub_path_set < 0) {
-    PyErr_SetString(
-        PyExc_RuntimeError,
-        "failed to set the stub import path on StrictModuleLoader object");
-    return -1;
-  }
-
-  // load strict module builtins
-  int should_enable_verbose_logging = PyObject_IsTrue(verbose_logging);
-  if (should_enable_verbose_logging < 0) {
-    PyErr_SetString(
-        PyExc_RuntimeError,
-        "error checking 'verbose_logging' on StrictModuleLoader");
-    return -1;
-  }
-  if (should_enable_verbose_logging) {
-    StrictModuleChecker_EnableVerboseLogging(self->checker);
-  }
-
-  int should_disable_analysis = PyObject_IsTrue(disable_analysis);
-  if (should_disable_analysis < 0) {
-    PyErr_SetString(
-        PyExc_RuntimeError,
-        "error checking 'disable_analysis' on StrictModuleLoader");
-    return -1;
-  }
-  if (should_disable_analysis) {
-    StrictModuleChecker_DisableAnalysis(self->checker);
-  }
-
-  // load strict module builtins
-  int should_load = PyObject_IsTrue(load_strictmod_builtin);
-  if (should_load < 0) {
-    PyErr_SetString(
-        PyExc_RuntimeError,
-        "error checking 'should_load_builtin' on StrictModuleLoader");
-    return -1;
-  }
-  if (should_load) {
-    int loaded = StrictModuleChecker_LoadStrictModuleBuiltins(self->checker);
-    if (loaded < 0) {
-      PyErr_SetString(
-          PyExc_RuntimeError,
-          "failed to load the strict module builtins on StrictModuleLoader "
-          "object");
+    if (should_disable_analysis) {
+      self->checker->disableAnalysis();
+    }
+    
+    // load strict module builtins
+    int should_load = PyObject_IsTrue(load_strictmod_builtin);
+    if (should_load < 0) {
+      PyErr_SetString(PyExc_RuntimeError,
+                      "error checking 'should_load_builtin' on StrictModuleLoader");
       return -1;
     }
+    if (should_load) {
+      if (!self->checker->loadStrictModuleModule()) {
+        PyErr_SetString(PyExc_RuntimeError,
+                        "failed to load the strict module builtins on StrictModuleLoader object");
+        return -1;
+      }
+    }
+    
+  } catch(const std::exception& ex) {
+    PyErr_SetString(PyExc_RuntimeError, ex.what());
+    return -1;
   }
   return 0;
 }
@@ -464,79 +407,78 @@ static int StrictModuleLoaderObject_init(
 /* StrictModuleLoader methods */
 
 static void StrictModuleLoader_dealloc(StrictModuleLoaderObject* self) {
-  StrictModuleChecker_Free(self->checker);
+  delete self->checker;
   PyObject_Del(self);
 }
 
 /* Returns new reference */
-static PyObject* errorInfoToTuple(ErrorInfo* info) {
+static PyObject* errorInfoToTuple(const std::unique_ptr<strictmod::StrictModuleException>& error) {
   PyObject* py_lineno = NULL;
   PyObject* py_col = NULL;
+  PyObject* py_msg = NULL;
+  PyObject* py_file = NULL;
   PyObject* result = NULL;
-  py_lineno = PyLong_FromLong(info->lineno);
+  py_lineno = PyLong_FromLong(error->getLineno());
   if (!py_lineno) {
     goto err_cleanup;
   }
-  py_col = PyLong_FromLong(info->col);
+  py_col = PyLong_FromLong(error->getCol());
   if (!py_col) {
     goto err_cleanup;
   }
-  result = PyTuple_Pack(4, info->msg, info->filename, py_lineno, py_col);
-  if (!result) {
+  py_msg = PyUnicode_FromString(error->getMsg().c_str());
+  if (!py_msg) {
     goto err_cleanup;
   }
-  Py_DECREF(py_lineno);
-  Py_DECREF(py_col);
-  return result;
+  py_file = PyUnicode_FromString(error->getFilename().c_str());
+  if (!py_file) {
+    goto err_cleanup;
+  }
+  result = PyTuple_Pack(4, py_msg, py_file, py_lineno, py_col);
 err_cleanup:
   Py_XDECREF(py_lineno);
   Py_XDECREF(py_col);
-  return NULL;
+  Py_XDECREF(py_msg);
+  Py_XDECREF(py_file);
+  return result;
 }
 
 static PyObject* StrictModuleLoader_check(
     StrictModuleLoaderObject* self,
     PyObject* args) {
   PyObject* mod_name;
-  PyObject* errors;
+  PyObject* errors = NULL;
   PyArena* arena;
   PyObject* result;
+  int error_count = 0;
   if (!PyArg_ParseTuple(args, "U", &mod_name)) {
     return NULL;
   }
-  int error_count = 0;
-  int is_strict = 0;
-  StrictAnalyzedModule* mod = StrictModuleChecker_Check(
-      self->checker, mod_name, &error_count, &is_strict);
-  errors = PyList_New(error_count);
-  ErrorInfo error_infos[error_count];
-  if (error_count > 0 && mod != NULL) {
-    if (StrictModuleChecker_GetErrors(mod, error_infos, error_count) < 0) {
+  auto *mod = self->checker->loadModule(PyUnicode_AsUTF8(mod_name));
+  if (!mod) {
       goto err_cleanup;
-    }
-    for (int i = 0; i < error_count; ++i) {
-      PyObject* py_err_tuple = errorInfoToTuple(&(error_infos[i]));
+  }
+  error_count = mod->getErrorSink().getErrorCount();
+  errors = PyList_New(error_count);
+  if (!errors) {
+    goto err_cleanup;
+  }
+  for (int i = 0; const auto& error : mod->getErrorSink().getErrors()) {
+      PyObject *py_err_tuple = errorInfoToTuple(error);
       if (!py_err_tuple) {
         goto err_cleanup;
       }
-      PyList_SET_ITEM(errors, i, py_err_tuple);
-    }
+      PyList_SET_ITEM(errors, i++, py_err_tuple);
   }
   if (PyErr_Occurred()) {
     goto err_cleanup;
   }
-  for (int i = 0; i < error_count; ++i) {
-    ErrorInfo_Clean(&(error_infos[i]));
-  }
-  arena = StrictModuleChecker_GetArena(self->checker);
+  arena = self->checker->getArena();
   result = create_AnalysisResult(mod, mod_name, errors, arena);
   Py_XDECREF(errors);
   return result;
 
 err_cleanup:
-  for (int i = 0; i < error_count; ++i) {
-    ErrorInfo_Clean(&(error_infos[i]));
-  }
   Py_XDECREF(errors);
   return NULL;
 }
@@ -551,7 +493,7 @@ static PyObject* StrictModuleLoader_check_source(
   PyObject* submodule_search_locations; // list of string
 
   // outputs
-  PyObject* errors;
+  PyObject* errors = NULL;
   PyArena* arena;
   PyObject* result;
 
@@ -575,13 +517,6 @@ static PyObject* StrictModuleLoader_check_source(
         submodule_search_locations);
     return NULL;
   }
-  Py_ssize_t search_list_size = PyList_GET_SIZE(submodule_search_locations);
-  const char* search_list[search_list_size];
-  if (PyListToCharArray(
-          submodule_search_locations, search_list, search_list_size) < 0) {
-    return NULL;
-  }
-
   // verify source
   PyCompilerFlags cf = _PyCompilerFlags_INIT;
   // buffer containing source str
@@ -593,46 +528,35 @@ static PyObject* StrictModuleLoader_check_source(
   }
 
   int error_count = 0;
-  int is_strict = 0;
-  StrictAnalyzedModule* mod = StrictModuleChecker_CheckSource(
-      self->checker,
+  auto *mod = self->checker->loadModuleFromSource(
       source_str,
-      mod_name,
-      file_name,
-      search_list,
-      search_list_size,
-      &error_count,
-      &is_strict);
-
-  errors = PyList_New(error_count);
-  ErrorInfo error_infos[error_count];
-  if (error_count > 0 && mod != NULL) {
-    if (StrictModuleChecker_GetErrors(mod, error_infos, error_count) < 0) {
+      PyUnicode_AsUTF8(mod_name),
+      PyUnicode_AsUTF8(file_name),
+      PyListToVector(submodule_search_locations));
+  if (!mod) {
       goto err_cleanup;
-    }
-    for (int i = 0; i < error_count; ++i) {
-      PyObject* py_err_tuple = errorInfoToTuple(&(error_infos[i]));
+  }
+  error_count = mod->getErrorSink().getErrorCount();
+  errors = PyList_New(error_count);
+  if (!errors) {
+    goto err_cleanup;
+  }
+  for (int i = 0; const auto& error : mod->getErrorSink().getErrors()) {
+      PyObject *py_err_tuple = errorInfoToTuple(error);
       if (!py_err_tuple) {
         goto err_cleanup;
       }
-      PyList_SET_ITEM(errors, i, py_err_tuple);
-    }
+      PyList_SET_ITEM(errors, i++, py_err_tuple);
   }
   if (PyErr_Occurred()) {
     goto err_cleanup;
   }
-  for (int i = 0; i < error_count; ++i) {
-    ErrorInfo_Clean(&(error_infos[i]));
-  }
-  arena = StrictModuleChecker_GetArena(self->checker);
+  arena = self->checker->getArena();
   result = create_AnalysisResult(mod, mod_name, errors, arena);
   Py_XDECREF(errors);
   Py_XDECREF(source_copy);
   return result;
 err_cleanup:
-  for (int i = 0; i < error_count; ++i) {
-    ErrorInfo_Clean(&(error_infos[i]));
-  }
   Py_XDECREF(errors);
   Py_XDECREF(source_copy);
   return NULL;
@@ -645,11 +569,12 @@ static PyObject* StrictModuleLoader_set_force_strict(
   if (!PyArg_ParseTuple(args, "O", &force_strict)) {
     return NULL;
   }
-  int ok = StrictModuleChecker_SetForceStrict(self->checker, force_strict);
-  if (ok == 0) {
-    Py_RETURN_TRUE;
+  if (!PyBool_Check(force_strict)) {
+    return NULL;
   }
-  Py_RETURN_FALSE;
+  bool forceStrictBool = force_strict == Py_True;
+  self->checker->setForceStrict(forceStrictBool);
+  Py_RETURN_TRUE;
 }
 
 static PyObject* StrictModuleLoader_set_force_strict_by_name(
@@ -659,17 +584,16 @@ static PyObject* StrictModuleLoader_set_force_strict_by_name(
   if (!PyArg_ParseTuple(args, "s", &forced_strict_module)) {
     return NULL;
   }
-  int ok = StrictModuleChecker_SetForceStrictByName(
-      self->checker, forced_strict_module);
-  if (ok == 0) {
-    Py_RETURN_TRUE;
-  }
-  Py_RETURN_FALSE;
+  self->checker->setForceStrictFunc(
+    [forced_strict_module](const std::string& modName, const std::string&) {
+       return modName == forced_strict_module;
+    });
+  Py_RETURN_TRUE;
 }
 
 static PyObject* StrictModuleLoader_get_analyzed_count(
     StrictModuleLoaderObject* self) {
-  int count = StrictModuleChecker_GetAnalyzedModuleCount(self->checker);
+  int count = self->checker->getAnalyzedModuleCount();
   return PyLong_FromLong(count);
 }
 
@@ -680,12 +604,8 @@ static PyObject* StrictModuleLoader_delete_module(
   if (!PyArg_ParseTuple(args, "U", &name)) {
     return NULL;
   }
-  int ok =
-      StrictModuleChecker_DeleteModule(self->checker, PyUnicode_AsUTF8(name));
-  if (ok == 0) {
-    Py_RETURN_TRUE;
-  }
-  Py_RETURN_FALSE;
+  self->checker->deleteModule(PyUnicode_AsUTF8(name));
+  Py_RETURN_TRUE;
 }
 
 static PyMethodDef StrictModuleLoader_methods[] = {
@@ -764,7 +684,4 @@ PyTypeObject Ci_StrictModuleLoader_Type = {
 };
 #pragma GCC diagnostic pop
 
-#ifdef __cplusplus
-}
-#endif
 #endif /* Py_LIMITED_API */

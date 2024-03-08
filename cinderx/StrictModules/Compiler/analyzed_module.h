@@ -11,9 +11,9 @@ namespace strictmod::compiler {
 using strictmod::objects::StrictModuleObject;
 
 enum class ModuleKind {
-  kStrict,
-  kStatic,
-  kNonStrict,
+  kStrict = Ci_STRICT_MODULE_KIND,
+  kStatic = Ci_STATIC_MODULE_KIND,
+  kNonStrict = Ci_NONSTRICT_MODULE_KIND,
 };
 
 enum class ShouldAnalyze {

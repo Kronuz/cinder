@@ -1,7 +1,7 @@
 // Copyright (c) Meta Platforms, Inc. and affiliates.
 #include "cinderx/StrictModules/analyzer.h"
 
-#include "cinderx/StrictModules/Compiler/abstract_module_loader.h"
+#include "cinderx/StrictModules/Compiler/module_loader.h"
 #include "cinderx/StrictModules/Objects/object_interface.h"
 #include "cinderx/StrictModules/Objects/objects.h"
 #include "cinderx/StrictModules/caller_context.h"
@@ -259,40 +259,65 @@ void Analyzer::visitImport(const stmt_ty stmt) {
    * the only purpose of loading the full submodule here is to match
    * the runtime in failing the import if it doesn't exist.
    */
+  bool useLazy = stack_.isGlobalScope();
   auto importNames = stmt->v.Import.names;
-  int n = asdl_seq_LEN(importNames);
-  for (int i = 0; i < n; ++i) {
+  auto n = asdl_seq_LEN(importNames);
+  for (auto i = 0; i < n; ++i) {
     alias_ty alias = reinterpret_cast<alias_ty>(asdl_seq_GET(importNames, i));
     std::string modName(PyUnicode_AsUTF8(alias->name));
-    std::shared_ptr<StrictModuleObject> leafMod =
-        loader_->loadModuleValue(modName);
-    std::shared_ptr<BaseStrictObject> mod;
     std::string asName = importedNameHelper(alias);
-    std::size_t split = modName.find('.');
-    std::string baseName = modName.substr(0, split);
-    if (leafMod != nullptr) {
-      mod = loader_->loadModuleValue(baseName);
-      if (alias->asname != nullptr) {
-        while (split != std::string::npos) {
-          if (mod == nullptr) {
-            break;
+    std::shared_ptr<BaseStrictObject> mod;
+    if (!useLazy) {
+      std::shared_ptr<StrictModuleObject> leafMod =
+          loader_->loadModuleValue(modName);
+      std::size_t split = modName.find('.');
+      std::string baseName = modName.substr(0, split);
+      if (leafMod != nullptr) {
+        mod = loader_->loadModuleValue(baseName);
+        if (alias->asname != nullptr) {
+          while (split != std::string::npos) {
+            if (mod == nullptr) {
+              break;
+            }
+            std::size_t nextSplit = modName.find('.', split + 1);
+            mod = iImportFrom(
+                std::move(mod),
+                modName.substr(split + 1, nextSplit),
+                context_,
+                loader_);
+            split = nextSplit;
           }
-          std::size_t nextSplit = modName.find('.', split + 1);
-          mod = iImportFrom(
-              std::move(mod),
-              modName.substr(split + 1, nextSplit),
-              context_,
-              loader_);
-          split = nextSplit;
         }
       }
+      if (mod == nullptr && alias->asname == nullptr) {
+        mod = makeUnknown(context_, "<imported module {}>", baseName);
+      } else if (mod == nullptr) {
+        mod =
+            makeUnknown(context_, "<imported module {} as {}>", modName, asName);
+      }
+
+    } else {
+      std::string unknownName;
+      if (alias->asname == nullptr) {
+        unknownName =
+            fmt::format("<imported module {}>", modName);
+      } else {
+        unknownName = fmt::format(
+            "<imported module {} as {}>", modName, asName);
+      }
+      std::optional<std::string> attrName = std::nullopt;
+      if (alias->asname != nullptr) attrName = std::string("");
+      mod = std::make_shared<StrictLazyObject>(
+          LazyObjectType(),
+          context_.caller,
+          loader_,
+          modName,
+          std::move(unknownName),
+          context_,
+          attrName);
+      loader_->recordLazyModule(modName);
     }
-    if (mod == nullptr && alias->asname == nullptr) {
-      mod = makeUnknown(context_, "<imported module {}>", baseName);
-    } else if (mod == nullptr) {
-      mod =
-          makeUnknown(context_, "<imported module {} as {}>", modName, asName);
-    }
+    
     stack_.set(std::move(asName), std::move(mod));
   }
 }
@@ -331,56 +356,90 @@ void Analyzer::visitImportFrom(const stmt_ty stmt) {
     mod = loader_->loadModuleValue(importedName);
   }
 
-  int namesSize = asdl_seq_LEN(importFrom.names);
-  for (int i = 0; i < namesSize; ++i) {
+  auto namesSize = asdl_seq_LEN(importFrom.names);
+  for (auto i = 0; i < namesSize; ++i) {
     alias_ty alias =
         reinterpret_cast<alias_ty>(asdl_seq_GET(importFrom.names, i));
     std::string aliasName = PyUnicode_AsUTF8(alias->name);
-    if (aliasName == "*") {
-      // star import is prohibited
-      context_.error<StarImportDisallowedException>(importedName);
-      continue;
-    }
     std::string displayName = std::string(importFrom.level, '.') + fromName;
-    std::string nameToStore = importedNameHelper(alias);
-
-    AnalysisResult modValue;
-    if (mod != nullptr) {
-      modValue = iImportFrom(mod, aliasName, context_, loader_);
-    } else if (useLazy) {
-      std::string unknownName;
-      if (alias->asname == nullptr) {
-        unknownName =
-            fmt::format("<{} imported from {}>", aliasName, displayName);
-      } else {
-        unknownName = fmt::format(
-            "<{} imported from {} as {}>", aliasName, displayName, nameToStore);
+    if (aliasName == "*") {
+      if (!stack_.isGlobalScope()) {
+        context_.error<StarImportDisallowedException>(displayName);
+        continue;
       }
-      modValue = std::make_shared<StrictLazyObject>(
-          LazyObjectType(),
-          context_.caller,
-          loader_,
-          importedName,
-          std::move(unknownName),
-          context_,
-          aliasName);
-      loader_->recordLazyModule(importedName);
-    }
-
-    if (modValue != nullptr) {
-      stack_.set(std::move(nameToStore), std::move(modValue));
-    } else if (alias->asname == nullptr) {
-      AnalysisResult unknown = makeUnknown(
-          context_, "<{} imported from {}>", aliasName, displayName);
-      stack_.set(std::move(nameToStore), std::move(unknown));
+      if (mod == nullptr) {
+        mod = loader_->loadModuleValue(importedName);
+        if (mod == nullptr) {
+          context_.error<StarImportDisallowedException>(importedName);
+          continue;
+        }
+      }
+      bool skip_leading_underscores = false;
+      auto all = iLoadAttr(mod, "__all__", nullptr, context_);
+      if (all == nullptr) {
+        all = iLoadAttr(mod, "__dict__", nullptr, context_);
+        skip_leading_underscores = true;
+      }
+      auto v = iGetElementsVec(all, context_);
+      for (auto& nameObj : v) {
+        auto sectionStr = std::dynamic_pointer_cast<StrictString>(nameObj);
+        auto name = sectionStr ? sectionStr->getValue() : nameObj->getDisplayName();
+        if (skip_leading_underscores && name.size() > 0 && name[0] == '_') {
+          continue;
+        }
+        AnalysisResult modValue;
+        modValue = iImportFrom(mod, name, context_, loader_);
+        if (modValue != nullptr) {
+          stack_.getGlobalScope()->set(name, std::move(modValue));
+        } else {
+          AnalysisResult unknown = makeUnknown(
+              context_,
+              "<{} imported from {}>",
+              name,
+              displayName);
+          stack_.getGlobalScope()->set(name, std::move(unknown));
+        }
+      }
     } else {
-      AnalysisResult unknown = makeUnknown(
-          context_,
-          "<{} imported from {} as {}>",
-          aliasName,
-          displayName,
-          nameToStore);
-      stack_.set(std::move(nameToStore), std::move(unknown));
+      std::string nameToStore = importedNameHelper(alias);
+
+      AnalysisResult modValue;
+      if (mod != nullptr) {
+        modValue = iImportFrom(mod, aliasName, context_, loader_);
+      } else if (useLazy) {
+        std::string unknownName;
+        if (alias->asname == nullptr) {
+          unknownName =
+              fmt::format("<{} imported from {}>", aliasName, displayName);
+        } else {
+          unknownName = fmt::format(
+              "<{} imported from {} as {}>", aliasName, displayName, nameToStore);
+        }
+        modValue = std::make_shared<StrictLazyObject>(
+            LazyObjectType(),
+            context_.caller,
+            loader_,
+            importedName,
+            std::move(unknownName),
+            context_,
+            aliasName);
+        loader_->recordLazyModule(importedName);
+      }
+      if (modValue != nullptr) {
+        stack_.set(std::move(nameToStore), std::move(modValue));
+      } else if (alias->asname == nullptr) {
+        AnalysisResult unknown = makeUnknown(
+            context_, "<{} imported from {}>", aliasName, displayName);
+        stack_.set(std::move(nameToStore), std::move(unknown));
+      } else {
+        AnalysisResult unknown = makeUnknown(
+            context_,
+            "<{} imported from {} as {}>",
+            aliasName,
+            displayName,
+            nameToStore);
+        stack_.set(std::move(nameToStore), std::move(unknown));
+      }
     }
   }
 }
@@ -389,7 +448,8 @@ void Analyzer::visitAssign(const stmt_ty stmt) {
   auto assignStmt = stmt->v.Assign;
   AnalysisResult value = visitExpr(assignStmt.value);
   if (value) {
-    for (int i = 0; i < asdl_seq_LEN(assignStmt.targets); ++i) {
+    auto n = asdl_seq_LEN(assignStmt.targets);
+    for (auto i = 0; i < n; ++i) {
       expr_ty target =
           reinterpret_cast<expr_ty>(asdl_seq_GET(assignStmt.targets, i));
       assignToTarget(target, value);
@@ -507,10 +567,10 @@ AnalysisResult Analyzer::visitFunctionDefHelper(
     qualName.append(funcName);
   }
   // function body
-  int bodySize = asdl_seq_LEN(body);
+  auto bodySize = asdl_seq_LEN(body);
   std::vector<stmt_ty> bodyVec;
   bodyVec.reserve(bodySize);
-  for (int i = 0; i < bodySize; ++i) {
+  for (auto i = 0; i < bodySize; ++i) {
     bodyVec.push_back(reinterpret_cast<stmt_ty>(asdl_seq_GET(body, i)));
   }
   // arguments
@@ -521,16 +581,16 @@ AnalysisResult Analyzer::visitFunctionDefHelper(
   std::optional<std::string> kwVarArg;
   DictDataT annotations;
 
-  int posonlySize = asdl_seq_LEN(args->posonlyargs);
+  auto posonlySize = asdl_seq_LEN(args->posonlyargs);
   posonlyArgs.reserve(posonlySize);
-  for (int i = 0; i < posonlySize; ++i) {
+  for (auto i = 0; i < posonlySize; ++i) {
     arg_ty a = reinterpret_cast<arg_ty>(asdl_seq_GET(args->posonlyargs, i));
     visitArgHelper(posonlyArgs, a, annotations);
   }
 
-  int posSize = asdl_seq_LEN(args->args);
+  auto posSize = asdl_seq_LEN(args->args);
   posArgs.reserve(posSize);
-  for (int i = 0; i < posSize; ++i) {
+  for (auto i = 0; i < posSize; ++i) {
     arg_ty a = reinterpret_cast<arg_ty>(asdl_seq_GET(args->args, i));
     visitArgHelper(posArgs, a, annotations);
   }
@@ -540,9 +600,9 @@ AnalysisResult Analyzer::visitFunctionDefHelper(
     visitArgHelper(args->vararg, annotations);
   }
 
-  int kwSize = asdl_seq_LEN(args->kwonlyargs);
+  auto kwSize = asdl_seq_LEN(args->kwonlyargs);
   kwonlyArgs.reserve(kwSize);
-  for (int i = 0; i < kwSize; ++i) {
+  for (auto i = 0; i < kwSize; ++i) {
     arg_ty a = reinterpret_cast<arg_ty>(asdl_seq_GET(args->kwonlyargs, i));
     visitArgHelper(kwonlyArgs, a, annotations);
   }
@@ -555,9 +615,9 @@ AnalysisResult Analyzer::visitFunctionDefHelper(
   std::vector<AnalysisResult> posDefaults;
   std::vector<AnalysisResult> kwDefaults;
 
-  int kwDefaultSize = asdl_seq_LEN(args->kw_defaults);
+  auto kwDefaultSize = asdl_seq_LEN(args->kw_defaults);
   kwDefaults.reserve(kwDefaultSize);
-  for (int i = 0; i < kwDefaultSize; ++i) {
+  for (auto i = 0; i < kwDefaultSize; ++i) {
     expr_ty d = reinterpret_cast<expr_ty>(asdl_seq_GET(args->kw_defaults, i));
     if (d == nullptr) {
       kwDefaults.push_back(nullptr);
@@ -566,9 +626,9 @@ AnalysisResult Analyzer::visitFunctionDefHelper(
     }
   }
 
-  int posDefaultSize = asdl_seq_LEN(args->defaults);
+  auto posDefaultSize = asdl_seq_LEN(args->defaults);
   posDefaults.reserve(posDefaultSize);
-  for (int i = 0; i < posDefaultSize; ++i) {
+  for (auto i = 0; i < posDefaultSize; ++i) {
     expr_ty d = reinterpret_cast<expr_ty>(asdl_seq_GET(args->defaults, i));
     posDefaults.push_back(visitExpr(d));
   }
@@ -581,10 +641,10 @@ AnalysisResult Analyzer::visitFunctionDefHelper(
   std::shared_ptr<StrictDict> annotationsObj = std::make_shared<StrictDict>(
       DictObjectType(), context_.caller, std::move(annotations));
 
-  AnalysisResult func(new StrictFunction(
+  std::shared_ptr<BaseStrictObject> func = std::make_shared<StrictFunction>(
       FunctionType(),
       context_.caller,
-      funcName,
+      std::move(funcName),
       std::move(qualName),
       lineno,
       col_offset,
@@ -604,15 +664,15 @@ AnalysisResult Analyzer::visitFunctionDefHelper(
       std::nullopt,
       std::move(annotationsObj),
       futureAnnotations_,
-      isAsync));
+      isAsync);
 
   // rewriter attrs
   (*astToResults_)[node] = func;
 
   // decorators
-  int decoratorSize = asdl_seq_LEN(decoratorList);
+  auto decoratorSize = asdl_seq_LEN(decoratorList);
   // decorators should be applied in reverse order
-  for (int i = decoratorSize - 1; i >= 0; --i) {
+  for (auto i = decoratorSize - 1; i >= 0; --i) {
     expr_ty dec = reinterpret_cast<expr_ty>(asdl_seq_GET(decoratorList, i));
     AnalysisResult decObj = visitExpr(dec);
     (*astToResults_)[dec] = decObj;
@@ -670,12 +730,12 @@ void Analyzer::visitClassDef(const stmt_ty stmt) {
   std::vector<AnalysisResult> bases = visitListLikeHelper(classDef.bases);
   // register metaclass if found in keyword args
   // find if any base class has metaclass
-  int kwSize = asdl_seq_LEN(classDef.keywords);
+  auto kwSize = asdl_seq_LEN(classDef.keywords);
   std::vector<std::string> kwargKeys;
   std::vector<AnalysisResult> kwargValues;
   kwargKeys.reserve(kwSize);
   kwargValues.reserve(kwSize);
-  for (int i = 0; i < kwSize; ++i) {
+  for (auto i = 0; i < kwSize; ++i) {
     keyword_ty kw =
         reinterpret_cast<keyword_ty>(asdl_seq_GET(classDef.keywords, i));
     AnalysisResult kwVal = visitExpr(kw->value);
@@ -762,7 +822,7 @@ void Analyzer::visitClassDef(const stmt_ty stmt) {
   auto baseTupleObj =
       std::make_shared<StrictTuple>(TupleType(), context_.caller, bases);
   if (metaclass->getType() == UnknownType()) {
-    context_.error<UnknownValueCallException>(metaclass->getDisplayName());
+//    context_.error<UnknownValueCallException>(metaclass->getDisplayName());
   } else {
     auto prepareFunc = iLoadAttr(metaclass, "__prepare__", nullptr, context_);
     if (prepareFunc != nullptr) {
@@ -830,9 +890,9 @@ void Analyzer::visitClassDef(const stmt_ty stmt) {
   auto classObj =
       iCall(metaclass, std::move(classCallArg), std::move(kwargKeys), context_);
   // Step 7, apply decorators
-  int decoratorSize = asdl_seq_LEN(classDef.decorator_list);
+  auto decoratorSize = asdl_seq_LEN(classDef.decorator_list);
   // decorators should be applied in reverse order
-  for (int i = decoratorSize - 1; i >= 0; --i) {
+  for (auto i = decoratorSize - 1; i >= 0; --i) {
     expr_ty dec =
         reinterpret_cast<expr_ty>(asdl_seq_GET(classDef.decorator_list, i));
     AnalysisResult decObj = visitExpr(dec);
@@ -859,7 +919,8 @@ void Analyzer::visitPass(const stmt_ty) {}
 
 void Analyzer::visitDelete(const stmt_ty stmt) {
   auto delStmt = stmt->v.Delete;
-  for (int i = 0; i < asdl_seq_LEN(delStmt.targets); ++i) {
+  auto n = asdl_seq_LEN(delStmt.targets);
+  for (auto i = 0; i < n; ++i) {
     expr_ty target =
         reinterpret_cast<expr_ty>(asdl_seq_GET(delStmt.targets, i));
     assignToTarget(target, nullptr);
@@ -958,11 +1019,11 @@ void Analyzer::visitIf(const stmt_ty stmt) {
 
 void Analyzer::visitWith(const stmt_ty stmt) {
   auto withStmt = stmt->v.With;
-  int withItemSize = asdl_seq_LEN(withStmt.items);
+  auto withItemSize = asdl_seq_LEN(withStmt.items);
   std::vector<AnalysisResult> contexts;
   contexts.reserve(withItemSize);
   // enter and record context
-  for (int i = 0; i < withItemSize; ++i) {
+  for (auto i = 0; i < withItemSize; ++i) {
     withitem_ty item =
         reinterpret_cast<withitem_ty>(asdl_seq_GET(withStmt.items, i));
     AnalysisResult context = visitExpr(item->context_expr);
@@ -1050,8 +1111,8 @@ void Analyzer::visitRaise(const stmt_ty stmt) {
 bool Analyzer::visitExceptionHandlerHelper(
     asdl_excepthandler_seq* handlers,
     AnalysisResult exc) {
-  int handlersSize = asdl_seq_LEN(handlers);
-  for (int i = 0; i < handlersSize; ++i) {
+  auto handlersSize = asdl_seq_LEN(handlers);
+  for (auto i = 0; i < handlersSize; ++i) {
     excepthandler_ty handler =
         reinterpret_cast<excepthandler_ty>(asdl_seq_GET(handlers, i));
     {
@@ -1191,14 +1252,16 @@ AnalysisResult Analyzer::visitAttribute(const expr_ty expr) {
   auto result = iLoadAttr(value, attrName, nullptr, context_);
   if (!result) {
     auto typeName = value->getTypeRef().getName();
-    log("%s: Encountered an AttributeError (%s has no %s)",
+    log("%s: Encountered an AttributeError (%s '%s' has no '%s')",
         context_.filename.c_str(),
         typeName.c_str(),
+        value->getDisplayName().c_str(),
         attrName);
     context_.raiseExceptionStr(
         AttributeErrorType(),
-        "{} object has no attribute {}",
+        "{} object '{}' has no attribute '{}'",
         typeName,
+        value->getDisplayName(),
         attrName);
   }
   return result;
@@ -1211,8 +1274,8 @@ AnalysisResult Analyzer::visitCall(const expr_ty expr) {
 
   auto argsSeq = call.args;
   auto kwargsSeq = call.keywords;
-  int argsLen = asdl_seq_LEN(argsSeq);
-  int kwargsLen = asdl_seq_LEN(kwargsSeq);
+  auto argsLen = asdl_seq_LEN(argsSeq);
+  auto kwargsLen = asdl_seq_LEN(kwargsSeq);
 
   // Special handling of super() with no arguments
   if (argsLen == 0 && kwargsLen == 0 && func == SuperType()) {
@@ -1234,7 +1297,7 @@ AnalysisResult Analyzer::visitCall(const expr_ty expr) {
   args.reserve(argsLen + kwargsLen);
   argNames.reserve(kwargsLen);
 
-  for (int i = 0; i < argsLen; ++i) {
+  for (auto i = 0; i < argsLen; ++i) {
     expr_ty argExpr = reinterpret_cast<expr_ty>(asdl_seq_GET(argsSeq, i));
     if (argExpr->kind == Starred_kind) {
       auto starredElts = visitExpr(argExpr);
@@ -1247,7 +1310,7 @@ AnalysisResult Analyzer::visitCall(const expr_ty expr) {
       args.push_back(visitExpr(argExpr));
     }
   }
-  for (int i = 0; i < kwargsLen; ++i) {
+  for (auto i = 0; i < kwargsLen; ++i) {
     keyword_ty kw = reinterpret_cast<keyword_ty>(asdl_seq_GET(kwargsSeq, i));
     if (kw->arg != nullptr) {
       args.push_back(visitExpr(kw->value));
@@ -1295,10 +1358,10 @@ AnalysisResult Analyzer::callMagicalSuperHelper(AnalysisResult func) {
 }
 
 std::vector<AnalysisResult> Analyzer::visitListLikeHelper(asdl_expr_seq* elts) {
-  int eltsLen = asdl_seq_LEN(elts);
+  auto eltsLen = asdl_seq_LEN(elts);
   std::vector<AnalysisResult> data;
   data.reserve(eltsLen);
-  for (int i = 0; i < eltsLen; ++i) {
+  for (auto i = 0; i < eltsLen; ++i) {
     expr_ty argExpr = reinterpret_cast<expr_ty>(asdl_seq_GET(elts, i));
     if (argExpr->kind == Starred_kind) {
       AnalysisResult starredVal = visitStarred(argExpr);
@@ -1352,13 +1415,13 @@ DictDataT Analyzer::visitDictUnpackHelper(expr_ty valueExpr) {
 
 AnalysisResult Analyzer::visitDict(const expr_ty expr) {
   auto dict = expr->v.Dict;
-  int keysLen = asdl_seq_LEN(dict.keys);
+  auto keysLen = asdl_seq_LEN(dict.keys);
   assert(keysLen == asdl_seq_LEN(dict.values));
 
   DictDataT map;
   map.reserve(keysLen);
 
-  for (int i = 0; i < keysLen; ++i) {
+  for (auto i = 0; i < keysLen; ++i) {
     expr_ty keyExpr = reinterpret_cast<expr_ty>(asdl_seq_GET(dict.keys, i));
     expr_ty valueExpr = reinterpret_cast<expr_ty>(asdl_seq_GET(dict.values, i));
     if (keyExpr == nullptr) {
@@ -1400,9 +1463,9 @@ AnalysisResult Analyzer::visitUnaryOp(const expr_ty expr) {
 AnalysisResult Analyzer::visitCompare(const expr_ty expr) {
   auto compare = expr->v.Compare;
   AnalysisResult leftObj = visitExpr(compare.left);
-  int cmpSize = asdl_seq_LEN(compare.ops);
+  auto cmpSize = asdl_seq_LEN(compare.ops);
   AnalysisResult compareValue;
-  for (int i = 0; i < cmpSize; ++i) {
+  for (auto i = 0; i < cmpSize; ++i) {
     cmpop_ty op = static_cast<cmpop_ty>(asdl_seq_GET(compare.ops, i));
     expr_ty rightExpr =
         reinterpret_cast<expr_ty>(asdl_seq_GET(compare.comparators, i));
@@ -1426,8 +1489,8 @@ AnalysisResult Analyzer::visitCompare(const expr_ty expr) {
 AnalysisResult Analyzer::visitBoolOp(const expr_ty expr) {
   auto boolOpExpr = expr->v.BoolOp;
   AnalysisResult result;
-  int valuesSize = asdl_seq_LEN(boolOpExpr.values);
-  for (int i = 0; i < valuesSize; ++i) {
+  auto valuesSize = asdl_seq_LEN(boolOpExpr.values);
+  for (auto i = 0; i < valuesSize; ++i) {
     expr_ty e = reinterpret_cast<expr_ty>(asdl_seq_GET(boolOpExpr.values, i));
     result = visitExpr(e);
     auto resultBool = iGetTruthValue(result, context_);
@@ -1569,7 +1632,7 @@ void Analyzer::visitGeneratorHelper(
     asdl_comprehension_seq* generators,
     CB callback,
     Args... targets) {
-  int numComps = asdl_seq_LEN(generators);
+  auto numComps = asdl_seq_LEN(generators);
   assert(numComps > 0);
   // the first comprehension does not have a separate inner scope
   comprehension_ty comp =
@@ -1577,7 +1640,7 @@ void Analyzer::visitGeneratorHelper(
   AnalysisResult compValue = visitExpr(comp->iter);
   std::vector<comprehension_ty> comps;
   comps.reserve(numComps - 1);
-  for (int i = 1; i < numComps; ++i) {
+  for (auto i = 1; i < numComps; ++i) {
     comps.push_back(
         reinterpret_cast<comprehension_ty>(asdl_seq_GET(generators, i)));
   }
@@ -1636,8 +1699,8 @@ void Analyzer::visitGeneratorHelperInner(
 }
 
 bool Analyzer::checkGeneratorIfHelper(asdl_expr_seq* ifs) {
-  int size = asdl_seq_LEN(ifs);
-  for (int i = 0; i < size; ++i) {
+  auto size = asdl_seq_LEN(ifs);
+  for (auto i = 0; i < size; ++i) {
     expr_ty cond = reinterpret_cast<expr_ty>(asdl_seq_GET(ifs, i));
     AnalysisResult v = iGetTruthValue(visitExpr(cond), context_);
     if (v != StrictTrue()) {
@@ -1715,10 +1778,10 @@ AnalysisResult Analyzer::visitFormattedValue(const expr_ty expr) {
 
 AnalysisResult Analyzer::visitJoinedStr(const expr_ty expr) {
   auto joinedStr = expr->v.JoinedStr;
-  int size = asdl_seq_LEN(joinedStr.values);
+  auto size = asdl_seq_LEN(joinedStr.values);
   std::string result;
   bool isUnknown = false;
-  for (int i = 0; i < size; ++i) {
+  for (auto i = 0; i < size; ++i) {
     expr_ty sectionExpr =
         reinterpret_cast<expr_ty>(asdl_seq_GET(joinedStr.values, i));
     AnalysisResult section = visitExpr(sectionExpr);
@@ -1737,7 +1800,8 @@ AnalysisResult Analyzer::visitJoinedStr(const expr_ty expr) {
 }
 
 void Analyzer::visitStmtSeq(const asdl_stmt_seq* seq) {
-  for (int i = 0; i < asdl_seq_LEN(seq); i++) {
+  auto n =  asdl_seq_LEN(seq);
+  for (auto i = 0; i < n; i++) {
     stmt_ty elt = reinterpret_cast<stmt_ty>(asdl_seq_GET(seq, i));
     visitStmt(elt);
   }
@@ -1808,11 +1872,11 @@ void Analyzer::assignToName(const expr_ty target, AnalysisResult value) {
 }
 
 void Analyzer::assignToListLike(asdl_expr_seq* elts, AnalysisResult value) {
-  int eltsSize = asdl_seq_LEN(elts);
+  auto eltsSize = asdl_seq_LEN(elts);
 
   // delete case
   if (value == nullptr) {
-    for (int i = 0; i < eltsSize; ++i) {
+    for (auto i = 0; i < eltsSize; ++i) {
       expr_ty elt = reinterpret_cast<expr_ty>(asdl_seq_GET(elts, i));
       assignToTarget(elt, nullptr);
     }
@@ -1822,8 +1886,8 @@ void Analyzer::assignToListLike(asdl_expr_seq* elts, AnalysisResult value) {
   std::vector<AnalysisResult> rData =
       iGetElementsVec(std::move(value), context_);
   // check of there is star
-  int starIdx = -1;
-  for (int i = 0; i < eltsSize; ++i) {
+  Py_ssize_t starIdx = -1;
+  for (auto i = 0; i < eltsSize; ++i) {
     expr_ty elt = reinterpret_cast<expr_ty>(asdl_seq_GET(elts, i));
     if (elt->kind == Starred_kind) {
       starIdx = i;
@@ -1832,15 +1896,15 @@ void Analyzer::assignToListLike(asdl_expr_seq* elts, AnalysisResult value) {
   }
 
   // assignment with star on the lhs, starred exp cannot be used in delete
-  if (starIdx >= 0 && eltsSize <= int(rData.size() + 1)) {
+  if (starIdx >= 0 && eltsSize <= (Py_ssize_t)rData.size() + 1) {
     // process part before star
-    for (int i = 0; i < starIdx; ++i) {
+    for (auto i = 0; i < starIdx; ++i) {
       expr_ty elt = reinterpret_cast<expr_ty>(asdl_seq_GET(elts, i));
       assignToTarget(elt, rData[i]);
     }
     // process the star part
-    int restSize = eltsSize - starIdx - 1;
-    int tailBound = rData.size() - restSize;
+    auto restSize = eltsSize - starIdx - 1;
+    auto tailBound = rData.size() - restSize;
     std::vector<AnalysisResult> starData(
         rData.begin() + starIdx, rData.begin() + tailBound);
     AnalysisResult starList = std::make_shared<StrictList>(
@@ -1848,7 +1912,7 @@ void Analyzer::assignToListLike(asdl_expr_seq* elts, AnalysisResult value) {
     expr_ty starElt = reinterpret_cast<expr_ty>(asdl_seq_GET(elts, starIdx));
     assignToTarget(starElt, std::move(starList));
     // process the part after star
-    for (int i = 0; i < restSize; ++i) {
+    for (auto i = 0; i < restSize; ++i) {
       expr_ty elt =
           reinterpret_cast<expr_ty>(asdl_seq_GET(elts, starIdx + i + 1));
       assignToTarget(elt, rData[tailBound + i]);
@@ -1856,14 +1920,14 @@ void Analyzer::assignToListLike(asdl_expr_seq* elts, AnalysisResult value) {
   }
   // normal assign
   else if (eltsSize == int(rData.size())) {
-    for (int i = 0; i < eltsSize; ++i) {
+    for (auto i = 0; i < eltsSize; ++i) {
       expr_ty elt = reinterpret_cast<expr_ty>(asdl_seq_GET(elts, i));
       assignToTarget(elt, rData[i]);
     }
   } else {
     // failed to unpack
     context_.error<FailedToUnpackException>(std::to_string(eltsSize));
-    for (int i = 0; i < eltsSize; ++i) {
+    for (auto i = 0; i < eltsSize; ++i) {
       expr_ty elt = reinterpret_cast<expr_ty>(asdl_seq_GET(elts, i));
       assignToTarget(elt, makeUnknown(context_, "<failed unpack>"));
     }

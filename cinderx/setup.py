@@ -186,7 +186,7 @@ ASMJIT_SRCS = [
 
 STRICTM_SRCS = [
     "StrictModules/Compiler/analyzed_module.cpp",
-    "StrictModules/Compiler/abstract_module_loader.cpp",
+    "StrictModules/Compiler/module_loader.cpp",
     "StrictModules/Compiler/module_info.cpp",
     "StrictModules/Compiler/stub.cpp",
     "StrictModules/Objects/base_object.cpp",
@@ -221,9 +221,7 @@ STRICTM_SRCS = [
     "StrictModules/analyzer.cpp",
     "StrictModules/ast_visitor.cpp",
     "StrictModules/parser_util.cpp",
-    "StrictModules/strict_module_checker_interface.cpp",
     "StrictModules/scope.cpp",
-    "StrictModules/pystrictmodule.cpp",
     "StrictModules/exceptions.cpp",
     "StrictModules/error_sink.cpp",
 ]
@@ -337,6 +335,7 @@ setuptools.setup(
     author_email="cinder@meta.com",
     description="High-performance Python runtime extension extensions",
     url="https://github.com/facebookincubator/cinder",
+    cmdclass={"build_ext": CinderBuildExt},
     ext_modules=[
         setuptools.Extension(
             "_static",
@@ -347,7 +346,7 @@ setuptools.setup(
         ),
         setuptools.Extension(
             "_strictmodule",
-            sources=["StrictModules/_strictmodule.c"],
+            sources=["_strictmodule.cpp", "pystrictmodule.cpp"],
             include_dirs=INCLUDE_DIRS,
             define_macros=[("Py_BUILD_CORE_MODULE", None)],
             depends=dep_header_files,

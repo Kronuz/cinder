@@ -77,8 +77,6 @@ class CallerContext {
     assert(errorSink != nullptr);
   }
 
-  CallerContext(const CallerContext& ctx) = default;
-
   template <typename T, typename... Args>
   void error(Args&&... args) const {
     errorSink->error<T>(

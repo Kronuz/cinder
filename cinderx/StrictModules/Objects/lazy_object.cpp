@@ -1,6 +1,6 @@
 #include "cinderx/StrictModules/Objects/lazy_object.h"
 
-#include "cinderx/StrictModules/Compiler/abstract_module_loader.h"
+#include "cinderx/StrictModules/Compiler/module_loader.h"
 
 #include <iostream>
 namespace strictmod::objects {
@@ -30,9 +30,26 @@ void StrictLazyObject::forceEvaluate(const CallerContext& caller) {
   }
   evaluated_ = true;
   std::shared_ptr<BaseStrictObject> result;
-  auto mod = loader_->loadModuleValue(modName_);
+  std::shared_ptr<BaseStrictObject> mod = loader_->loadModuleValue(modName_);
   if (mod && attrName_) {
-    result = iImportFrom(mod, *attrName_, context_, loader_);
+    if (!attrName_->empty()) {
+      result = iImportFrom(mod, *attrName_, context_, loader_);
+    } else {
+      std::size_t split = modName_.find('.');
+      std::string baseName = modName_.substr(0, split);
+      mod = loader_->loadModuleValue(baseName);
+      while (split != std::string::npos) {
+        if (mod == nullptr) {
+          break;
+        }
+        std::size_t nextSplit = modName_.find('.', split + 1);
+        mod = iImportFrom(std::move(mod),
+                          modName_.substr(split + 1, nextSplit),
+                          context_,
+                          loader_);
+        split = nextSplit;
+      }
+    }
   } else {
     result = mod;
   }

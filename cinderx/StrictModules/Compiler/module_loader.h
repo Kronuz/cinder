@@ -14,16 +14,20 @@
 #include <unordered_set>
 #include <utility>
 #include <vector>
+
 namespace strictmod::compiler {
 enum class FileSuffixKind { kPythonFile, kStrictStubFile, kTypingStubFile };
 
 enum class AllowListKind { kPrefix, kExact };
 
-static const std::vector<std::string> kStrictFlags{"__strict__", "__static__"};
-
-const char* getFileSuffixKindName(FileSuffixKind kind);
+const std::string& getFileSuffixKindName(FileSuffixKind kind);
 
 class ModuleLoader {
+  static std::shared_ptr<BaseErrorSink> defaultErrorSinkFactory() {
+    static std::shared_ptr<BaseErrorSink> factory = std::make_shared<CollectingErrorSink>();
+    return factory;
+  }
+
  public:
   typedef std::function<bool(const std::string&, const std::string&)>
       ForceStrictFunc;
@@ -41,7 +45,7 @@ class ModuleLoader {
             std::move(stubImportPath),
             std::move(allowList),
             std::nullopt,
-            [] { return std::make_unique<CollectingErrorSink>(); }) {}
+            defaultErrorSinkFactory) {}
 
   ModuleLoader(
       std::vector<std::string> importPath,
@@ -53,7 +57,7 @@ class ModuleLoader {
             std::move(stubImportPath),
             std::move(allowList),
             forceStrict,
-            [] { return std::make_unique<CollectingErrorSink>(); }) {}
+            defaultErrorSinkFactory) {}
 
   ModuleLoader(
       std::vector<std::string> importPath,
@@ -96,8 +100,8 @@ class ModuleLoader {
   pass ownership to caller of an already analyzed module.
   Return nullptr if module is not loaded
   */
-  std::unique_ptr<AnalyzedModule> passModule(const std::string& modName) {
-    return std::move(modules_[modName]);
+  std::shared_ptr<AnalyzedModule> passModule(const std::string& modName) {
+    return modules_[modName];
   }
 
   /**
@@ -107,15 +111,13 @@ class ModuleLoader {
   Note that this is different from the value of the analyzed module
   being nullptr, indicating that the analysis failed/module is not strict
   */
-  AnalyzedModule* loadModule(const char* modName);
-  AnalyzedModule* loadModule(const std::string& modName);
+  std::shared_ptr<AnalyzedModule> loadModule(const std::string& modName);
   /**
   Remove a module from checked modules
   */
   void deleteModule(const std::string& modName);
   void recordLazyModule(const std::string& modName);
 
-  std::shared_ptr<StrictModuleObject> loadModuleValue(const char* modName);
   std::shared_ptr<StrictModuleObject> loadModuleValue(
       const std::string& modName);
 
@@ -123,17 +125,11 @@ class ModuleLoader {
   std::shared_ptr<StrictModuleObject> tryGetModuleValue(
       const std::string& modName);
 
-  AnalyzedModule* loadModuleFromSource(
+  std::shared_ptr<AnalyzedModule> loadModuleFromSource(
       const std::string& source,
       const std::string& name,
       const std::string& filename,
       std::vector<std::string> searchLocations);
-  AnalyzedModule* loadModuleFromSource(
-      const char* source,
-      const std::string& name,
-      const std::string& filename,
-      std::vector<std::string> searchLocations);
-
   std::unique_ptr<ModuleInfo> findModule(
       const std::string& modName,
       const std::vector<std::string>& searchLocations,
@@ -147,17 +143,17 @@ class ModuleLoader {
       const std::string& filename,
       int mode);
 
-  AnalyzedModule* loadSingleModule(const std::string& modName);
+  std::shared_ptr<AnalyzedModule> loadSingleModule(const std::string& modName);
 
-  bool setImportPath(std::vector<std::string> importPath);
-  bool setStubImportPath(std::string importPath);
-  bool setStubImportPath(std::vector<std::string> importPath);
+  void setImportPath(std::vector<std::string> importPath);
+  void setStubImportPath(std::string importPath);
+  void setStubImportPath(std::vector<std::string> importPath);
   void setForceStrict(bool force);
   void setForceStrictFunc(ForceStrictFunc forceFunc);
-  bool clearAllowList();
-  bool setAllowListPrefix(std::vector<std::string> allowList);
-  bool setAllowListExact(std::vector<std::string> allowList);
-  bool setAllowListRegex(std::vector<std::string> allowList);
+  void clearAllowList();
+  void setAllowListPrefix(std::vector<std::string> allowList);
+  void setAllowListExact(std::vector<std::string> allowList);
+  void setAllowListRegex(std::vector<std::string> allowList);
 
   int getAnalyzedModuleCount() const;
 
@@ -195,17 +191,17 @@ class ModuleLoader {
   AllowListType allowList_;
   PyArena* arena_;
   // the loader owns all analyzed module produced during the analysis
-  std::unordered_map<std::string, std::unique_ptr<AnalyzedModule>> modules_;
+  std::unordered_map<std::string, std::shared_ptr<AnalyzedModule>> modules_;
   // modules that are lazily imported but not evaluated yet
   std::unordered_set<std::string> lazy_modules_;
   std::optional<ForceStrictFunc> forceStrict_;
   ErrorSinkFactory errorSinkFactory_;
-  std::unordered_set<std::unique_ptr<AnalyzedModule>> deletedModules_;
+  std::unordered_set<std::shared_ptr<AnalyzedModule>> deletedModules_;
   std::vector<std::regex> allowListRegexes_;
   bool verbose_ = false;
   bool disableAnalysis_ = false;
 
-  AnalyzedModule* analyze(std::unique_ptr<ModuleInfo> modInfo);
+  std::shared_ptr<AnalyzedModule> analyze(std::unique_ptr<ModuleInfo>&& modInfo);
   bool isAllowListed(const std::string& modName);
   bool isForcedStrict(const std::string& modName, const std::string& fileName);
   bool hasAllowListedParent(const std::string& modName);
