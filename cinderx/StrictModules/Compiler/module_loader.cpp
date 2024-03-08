@@ -182,10 +182,10 @@ std::pair<ModuleKind, ShouldAnalyze> getModuleKind(ModuleInfo* modInfo) {
   return {ModuleKind::kNonStrict, ShouldAnalyze::kYes};
 }
 
-AnalyzedModule* ModuleLoader::loadModule(const std::string& modName) {
+std::shared_ptr<AnalyzedModule> ModuleLoader::loadModule(const std::string& modName) {
   auto exist = modules_.find(modName);
   if (exist != modules_.end()) {
-    return exist->second.get();
+    return exist->second;
   }
   char delimiter = '.';
   auto end = modName.find(delimiter);
@@ -211,7 +211,7 @@ void ModuleLoader::deleteModule(const std::string& modName) {
 
 std::shared_ptr<StrictModuleObject> ModuleLoader::loadModuleValue(
     const std::string& modName) {
-  AnalyzedModule* mod = loadModule(modName);
+  auto mod = loadModule(modName);
   if (mod) {
     return mod->getModuleValue();
   }
@@ -237,10 +237,10 @@ std::shared_ptr<StrictModuleObject> ModuleLoader::tryGetModuleValue(
   return nullptr;
 }
 
-AnalyzedModule* ModuleLoader::loadSingleModule(const std::string& modName) {
+std::shared_ptr<AnalyzedModule> ModuleLoader::loadSingleModule(const std::string& modName) {
   auto exist = modules_.find(modName);
   if (exist != modules_.end()) {
-    return exist->second.get();
+    return exist->second;
   }
   // look for pys (strict module specific) stub
   auto stubModInfo =
@@ -326,7 +326,7 @@ void ModuleLoader::setAllowListRegex(std::vector<std::string> allowList) {
   }
 }
 
-AnalyzedModule* ModuleLoader::loadModuleFromSource(
+std::shared_ptr<AnalyzedModule> ModuleLoader::loadModuleFromSource(
     const std::string& source,
     const std::string& name,
     const std::string& filename,
@@ -482,7 +482,7 @@ std::unique_ptr<ModuleInfo> ModuleLoader::findModuleFromSource(
   return nullptr;
 }
 
-AnalyzedModule* ModuleLoader::analyze(std::unique_ptr<ModuleInfo> modInfo) {
+std::shared_ptr<AnalyzedModule> ModuleLoader::analyze(std::unique_ptr<ModuleInfo>&& modInfo) {
   const mod_ty ast = modInfo->getAst();
 
   // Following python semantics, publish the module before ast visits
@@ -497,8 +497,8 @@ AnalyzedModule* ModuleLoader::analyze(std::unique_ptr<ModuleInfo> modInfo) {
     should_analyze = mod_kind_result.second;
   }
   modInfo->raiseAnyFlagError(errorSinkBorrowed);
-  AnalyzedModule* analyzedModule =
-      new AnalyzedModule(kind, std::move(errorSink), std::move(modInfo));
+  auto analyzedModule = std::make_shared<AnalyzedModule>(
+    kind, std::move(errorSink), std::move(modInfo));
   const ModuleInfo& moduleInfo = analyzedModule->getModuleInfo();
   const std::string& name = moduleInfo.getModName();
   const std::string& filename = moduleInfo.getFilename();
@@ -506,11 +506,8 @@ AnalyzedModule* ModuleLoader::analyze(std::unique_ptr<ModuleInfo> modInfo) {
   // if `name` already exist in `modules_`, do not override the existing one
   // but if there were no AST or filename is different, update the AST
   auto existingModIt = modules_.find(name);
-  if (existingModIt == modules_.end()) {
-    modules_[name] = std::unique_ptr<AnalyzedModule>(analyzedModule);
-    lazy_modules_.erase(name);
-  } else {
-    AnalyzedModule* existingMod = existingModIt->second.get();
+  if (existingModIt != modules_.end()) {
+    auto existingMod = existingModIt->second;
     // If file kind is different, report an error
 
     if (existingMod->getStubKindAsInt() != analyzedModule->getStubKindAsInt()) {
@@ -529,6 +526,9 @@ AnalyzedModule* ModuleLoader::analyze(std::unique_ptr<ModuleInfo> modInfo) {
     }
     return existingMod;
   }
+
+  modules_[name] = analyzedModule;
+  lazy_modules_.erase(name);
 
   if (analyzedModule->isStrict() || isForcedStrict(name, filename)) {
     assert(ast != nullptr);

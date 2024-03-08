@@ -100,8 +100,8 @@ class ModuleLoader {
   pass ownership to caller of an already analyzed module.
   Return nullptr if module is not loaded
   */
-  std::unique_ptr<AnalyzedModule> passModule(const std::string& modName) {
-    return std::move(modules_[modName]);
+  std::shared_ptr<AnalyzedModule> passModule(const std::string& modName) {
+    return modules_[modName];
   }
 
   /**
@@ -111,7 +111,7 @@ class ModuleLoader {
   Note that this is different from the value of the analyzed module
   being nullptr, indicating that the analysis failed/module is not strict
   */
-  AnalyzedModule* loadModule(const std::string& modName);
+  std::shared_ptr<AnalyzedModule> loadModule(const std::string& modName);
   /**
   Remove a module from checked modules
   */
@@ -125,7 +125,7 @@ class ModuleLoader {
   std::shared_ptr<StrictModuleObject> tryGetModuleValue(
       const std::string& modName);
 
-  AnalyzedModule* loadModuleFromSource(
+  std::shared_ptr<AnalyzedModule> loadModuleFromSource(
       const std::string& source,
       const std::string& name,
       const std::string& filename,
@@ -143,7 +143,7 @@ class ModuleLoader {
       const std::string& filename,
       int mode);
 
-  AnalyzedModule* loadSingleModule(const std::string& modName);
+  std::shared_ptr<AnalyzedModule> loadSingleModule(const std::string& modName);
 
   void setImportPath(std::vector<std::string> importPath);
   void setStubImportPath(std::string importPath);
@@ -191,17 +191,17 @@ class ModuleLoader {
   AllowListType allowList_;
   PyArena* arena_;
   // the loader owns all analyzed module produced during the analysis
-  std::unordered_map<std::string, std::unique_ptr<AnalyzedModule>> modules_;
+  std::unordered_map<std::string, std::shared_ptr<AnalyzedModule>> modules_;
   // modules that are lazily imported but not evaluated yet
   std::unordered_set<std::string> lazy_modules_;
   std::optional<ForceStrictFunc> forceStrict_;
   ErrorSinkFactory errorSinkFactory_;
-  std::unordered_set<std::unique_ptr<AnalyzedModule>> deletedModules_;
+  std::unordered_set<std::shared_ptr<AnalyzedModule>> deletedModules_;
   std::vector<std::regex> allowListRegexes_;
   bool verbose_ = false;
   bool disableAnalysis_ = false;
 
-  AnalyzedModule* analyze(std::unique_ptr<ModuleInfo> modInfo);
+  std::shared_ptr<AnalyzedModule> analyze(std::unique_ptr<ModuleInfo>&& modInfo);
   bool isAllowListed(const std::string& modName);
   bool isForcedStrict(const std::string& modName, const std::string& fileName);
   bool hasAllowListedParent(const std::string& modName);
