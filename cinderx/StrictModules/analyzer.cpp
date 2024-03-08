@@ -641,10 +641,10 @@ AnalysisResult Analyzer::visitFunctionDefHelper(
   std::shared_ptr<StrictDict> annotationsObj = std::make_shared<StrictDict>(
       DictObjectType(), context_.caller, std::move(annotations));
 
-  AnalysisResult func(new StrictFunction(
+  std::shared_ptr<BaseStrictObject> func = std::make_shared<StrictFunction>(
       FunctionType(),
       context_.caller,
-      funcName,
+      std::move(funcName),
       std::move(qualName),
       lineno,
       col_offset,
@@ -664,7 +664,7 @@ AnalysisResult Analyzer::visitFunctionDefHelper(
       std::nullopt,
       std::move(annotationsObj),
       futureAnnotations_,
-      isAsync));
+      isAsync);
 
   // rewriter attrs
   (*astToResults_)[node] = func;

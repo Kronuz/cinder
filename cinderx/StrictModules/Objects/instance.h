@@ -36,8 +36,8 @@ class StrictInstance : public BaseStrictObject {
   // implemented in dict_object.cpp
   std::shared_ptr<BaseStrictObject> getDunderDict();
 
-  void setDict(std::shared_ptr<DictType> dict) {
-    dict_ = dict;
+  void setDict(std::shared_ptr<DictType>&& dict) {
+    dict_ = std::move(dict);
     dictObj_ = nullptr;
   }
 

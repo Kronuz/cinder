@@ -38,7 +38,7 @@ class StrictFunction : public StrictInstance {
       int lineno,
       int col,
       std::vector<stmt_ty> body,
-      EnvT closure,
+      EnvT&& closure,
       SymtableEntry symbols,
       std::vector<std::string> posonlyArgs,
       std::vector<std::string> posArgs,
